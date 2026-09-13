@@ -49,7 +49,7 @@ REPLAY_BEHAVIORS = [
 ]
 
 
-def _run_sim(rounds: int, agents: int) -> tuple[list[dict], str]:
+def _run_sim(rounds: int, agents: int) -> tuple[dict, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "weiran.simulate",
          "--agents", str(agents), "--rounds", str(rounds), "--seed-text", SEED],
@@ -59,9 +59,9 @@ def _run_sim(rounds: int, agents: int) -> tuple[list[dict], str]:
         print(proc.stdout[-2000:])
         print(proc.stderr[-2000:], file=sys.stderr)
         raise SystemExit(f"推演失败，退出码 {proc.returncode}")
-    data = json.loads((SIM / "twitter_rounds.json").read_text(encoding="utf-8"))
-    line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("归类")), "")
-    return data, line
+    payload = json.loads((SIM / "twitter_rounds.json").read_text(encoding="utf-8"))
+    line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("完成：")), "")
+    return payload, line
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +129,19 @@ def check_engine() -> bool:
 
 def check_end_to_end(rounds: int, agents: int) -> bool:
     print(f"\n【第 3 层】端到端：同一条命令跑两次（{agents} agent × {rounds} 轮）")
-    a, line_a = _run_sim(rounds, agents)
+    a_meta, line_a = _run_sim(rounds, agents)
     print("  第一次 " + line_a)
-    b, line_b = _run_sim(rounds, agents)
+    b_meta, line_b = _run_sim(rounds, agents)
     print("  第二次 " + line_b)
+
+    # 压缩过的曲线与 round=day 不可比（激励项按步累加）。这一层比的是
+    # 「同一条命令的两个不同输出」，所以压缩不影响结论，但必须在输出里
+    # 说明，免得有人把这行数字搬去和 round=day 的结果并列。
+    meta = a_meta.get("meta", {})
+    if meta.get("compressed"):
+        print(f"  ⚠️ 本次为压缩模式（每轮 {meta['days_per_round']:.2f} 天）——"
+              "结论只适用于「两次运行彼此比较」，不可与 round=day 的结果比")
+    a, b = a_meta["rounds"], b_meta["rounds"]
 
     beh_same = [r["behaviors"] for r in a] == [r["behaviors"] for r in b]
     ok = [r["state"] for r in a] == [r["state"] for r in b]

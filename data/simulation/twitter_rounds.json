@@ -1,109 +1,197 @@
-[
-  {
-    "index": 0,
-    "seconds": 1.84,
-    "llm_seconds": 2.0,
-    "calls": 2,
-    "prompt_tokens": 2422,
-    "completion_tokens": 169,
-    "behaviors": [
-      "discussion",
-      "discussion"
-    ],
-    "state": {
-      "attention": 0.0654,
-      "panic": 0.1088,
-      "trust": 0.6952,
-      "polarization": 0.1,
-      "risk": 0.1034,
-      "stability": 0.8492
-    },
-    "actions": [
-      {
-        "user_id": 0,
-        "created_at": 0,
-        "action": "create_post",
-        "info": "{\"content\": \"\\u6d4b\\u8bd5\", \"post_id\": 1}"
-      },
-      {
-        "user_id": 1,
-        "created_at": 0,
-        "action": "do_nothing",
-        "info": "{}"
-      },
-      {
-        "user_id": 2,
-        "created_at": 0,
-        "action": "create_post",
-        "info": "{\"content\": \"\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u9ad8\\u6821\\u8206\\u60c5\\u5904\\u7f6e\\uff0c\\u6700\\u6015\\u7684\\u5c31\\u662f\\\"\\u7b49\\u4e00\\u7b49\\u3001\\u770b\\u4e00\\u770b\\\"\\u3002\\u706b\\u661f\\u5b50\\u4e0d\\u6251\\uff0c\\u8f6c\\u773c\\u5c31\\u662f\\u5c71\\u706b\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u51e0\\u53e5\\u9a82\\uff0c\\u4e5f\\u522b\\u62d6\\u5230\\u4eba\\u5fc3\\u51c9\\u900f\\u2014\\u2014\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\", \"post_id\": 2}"
-      }
-    ],
-    "errors": 0
+{
+  "meta": {
+    "rounds": 3,
+    "agents": 3,
+    "platform": "twitter",
+    "seed_text": "",
+    "days_per_round": 7.0,
+    "compressed": true,
+    "comparable_to_round_day": false,
+    "phases_on": true,
+    "knowledge_on": true,
+    "feedback_on": true,
+    "world_state": true,
+    "total_seconds": 17.84,
+    "total_actions": 14
   },
-  {
-    "index": 1,
-    "seconds": 4.94,
-    "llm_seconds": 3.39,
-    "calls": 3,
-    "prompt_tokens": 5392,
-    "completion_tokens": 288,
-    "behaviors": [
-      "discussion",
-      "discussion",
-      "discussion"
-    ],
-    "state": {
-      "attention": 0.0823,
-      "panic": 0.1201,
-      "trust": 0.6885,
-      "polarization": 0.1003,
-      "risk": 0.1108,
-      "stability": 0.8475
+  "rounds": [
+    {
+      "index": 0,
+      "seconds": 3.22,
+      "llm_seconds": 2.61,
+      "calls": 1,
+      "prompt_tokens": 1363,
+      "completion_tokens": 330,
+      "phase_id": "P1,P2",
+      "injected": {
+        "A01": "cd329fa507f5",
+        "A02": "235ea208f9df",
+        "A03": "78d1c5215f2f"
+      },
+      "injection_sample": "[第 0 轮开始时的校园舆情态势]\n关注很低；恐慌很低；信任偏高；极化很低；风险很低；稳定很高\n\n你已知晓的事实（未列出的，你并不知道）：\n- 2025 届毕业去向落实率为 78.6%\n- 2024 届落实率为 92.3%，同比下降 13.7 个百分点\n- 分专业落实率最低 58.2%，最高 94.1%\n- 学工部下发劝导学生删帖的通知\n- 校方内部顾虑公开数据会影响招生\n\n你知道、但尚未公开的事实（说出它们可能给你带来麻烦，公开还是回避由你自己决定）：\n- 实际核实率仅 32.2%（1250 人中核实 402 人）",
+      "behaviors": [
+        "disclosure",
+        "amplification",
+        "discussion",
+        "discussion"
+      ],
+      "state": {
+        "attention": 0.0543,
+        "panic": 0.1016,
+        "trust": 0.6999,
+        "polarization": 0.1172,
+        "risk": 0.1121,
+        "stability": 0.8527
+      },
+      "actions": [
+        {
+          "user_id": 0,
+          "created_at": 0,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u62a5\\u544a\\u6302\\u7f51\\uff0c\\u843d\\u5b9e\\u7387 78.6% \\u66dd\\u5149\", \"post_id\": 1}"
+        },
+        {
+          "user_id": 1,
+          "created_at": 0,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u5b66\\u751f\\u81ea\\u5236\\u4e94\\u5e74\\u5bf9\\u6bd4\\u56fe\\u6269\\u6563\\uff0c\\u5f80\\u5c4a\\u751f\\u73b0\\u8eab\\u8bf4\\u6cd5\", \"post_id\": 2}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 0,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u5173\\u4e8e\\u5c31\\u4e1a\\u6570\\u636e\\u7684\\u4e8b\\uff0c\\u6211\\u60f3\\u8bf4\\u51e0\\u53e5\\u3002\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u6570\\u636e\\u53e3\\u5f84\\u4e94\\u5e74\\u53d8\\u8fc7\\u4e09\\u6b21\\uff0c\\u540c\\u6bd4\\u964d\\u4e8613.7\\u4e2a\\u767e\\u5206\\u70b9\\uff0c\\u8fd9\\u4e9b\\u8d26\\u5927\\u5bb6\\u5fc3\\u91cc\\u90fd\\u7b97\\u5f97\\u6e05\\u3002\\n\\n\\u8d8a\\u662f\\u60f3\\u6342\\u4f4f\\uff0c\\u706b\\u661f\\u8d8a\\u5bb9\\u6613\\u70e7\\u6210\\u5c71\\u706b\\u3002\\u5b66\\u5de5\\u90e8\\u8ba9\\u5220\\u5e16\\uff0c\\u770b\\u4f3c\\u706d\\u706b\\uff0c\\u5b9e\\u5219\\u662f\\u628a\\u4fe1\\u4efb\\u5f80\\u706b\\u4e0a\\u67b6\\u3002\\u6821\\u65b9\\u987e\\u8651\\u62db\\u751f\\u6211\\u7406\\u89e3\\uff0c\\u4f46\\u516c\\u4fe1\\u529b\\u4e00\\u65e6\\u788e\\u4e86\\uff0c\\u62db\\u6765\\u7684\\u4e5f\\u662f\\u7591\\u8651\\u3002\\n\\n\\u6b62\\u635f\\u8981\\u5feb\\uff0c\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\\u4e0e\\u5176\\u7b49\\u7740\\u6821\\u5916\\u81ea\\u5a92\\u4f53\\u628a\\u300c\\u6ce8\\u6c34\\u5c31\\u4e1a\\u7387\\u300d\\u7092\\u6210\\u6807\\u7b7e\\uff0c\\u4e0d\\u5982\\u6211\\u4eec\\u81ea\\u5df1\\u5148\\u628a\\u8bdd\\u8bf4\\u6e05\\u695a\\u2014\\u2014\\u6570\\u636e\\u600e\\u4e48\\u6765\\u7684\\u3001\\u53e3\\u5f84\\u4e3a\\u4ec0\\u4e48\\u53d8\\u3001\\u4e0b\\u4e00\\u6b65\\u600e\\u4e48\\u8865\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\", \"post_id\": 3}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 0,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u7075\\u6d3b\\u5c31\\u4e1a\\u5360\\u6bd421.4%\\uff0c\\u8fd9\\u4e2a\\u6570\\u5b57\\u672c\\u8eab\\u4e0d\\u53ef\\u6015\\uff0c\\u53ef\\u6015\\u7684\\u662f\\u6211\\u4eec\\u4e0d\\u6562\\u89e3\\u91ca\\u5b83\\u3002\\n\\n\\u6bd5\\u4e1a\\u53bb\\u5411\\u843d\\u5b9e\\u7387\\u4ece92.3%\\u6389\\u523078.6%\\uff0c\\u80cc\\u540e\\u662f\\u771f\\u5b9e\\u7684\\u5c31\\u4e1a\\u538b\\u529b\\uff0c\\u662f\\u6bcf\\u4e2a\\u5b66\\u751f\\u548c\\u5bb6\\u5ead\\u7684\\u7126\\u8651\\u3002\\u628a\\u8fd9\\u4efd\\u7126\\u8651\\u5f53\\u6210\\u8206\\u60c5\\u6765\\u7ba1\\u63a7\\uff0c\\u662f\\u672c\\u672b\\u5012\\u7f6e\\u3002\\n\\n\\u6211\\u59cb\\u7ec8\\u76f8\\u4fe1\\uff1a\\u7ec4\\u7ec7\\u7684\\u516c\\u4fe1\\u529b\\u50cf\\u74f7\\u5668\\u3002\\u4e0e\\u5176\\u53cd\\u590d\\u4fee\\u8865\\u88c2\\u7eb9\\uff0c\\u4e0d\\u5982\\u4e00\\u5f00\\u59cb\\u5c31\\u522b\\u8ba9\\u5b83\\u88c2\\u3002\\u5c3d\\u65e9\\u8868\\u6001\\u3001\\u5c3d\\u65e9\\u8ba4\\u9519\\u3001\\u5c3d\\u65e9\\u7ed9\\u51fa\\u89e3\\u51b3\\u65b9\\u6848\\u2014\\u2014\\u8fd9\\u624d\\u662f\\u5bf9\\u5b66\\u751f\\u8d1f\\u8d23\\uff0c\\u4e5f\\u662f\\u5bf9\\u5b66\\u6821\\u957f\\u8fdc\\u8d1f\\u8d23\\u3002\", \"post_id\": 4}"
+        }
+      ],
+      "errors": 0
     },
-    "actions": [
-      {
-        "user_id": 0,
-        "created_at": 1,
-        "action": "refresh",
-        "info": "{\"posts\": [{\"post_id\": 1, \"user_id\": 0, \"content\": \"\\u6d4b\\u8bd5\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}, {\"post_id\": 2, \"user_id\": 2, \"content\": \"\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u9ad8\\u6821\\u8206\\u60c5\\u5904\\u7f6e\\uff0c\\u6700\\u6015\\u7684\\u5c31\\u662f\\\"\\u7b49\\u4e00\\u7b49\\u3001\\u770b\\u4e00\\u770b\\\"\\u3002\\u706b\\u661f\\u5b50\\u4e0d\\u6251\\uff0c\\u8f6c\\u773c\\u5c31\\u662f\\u5c71\\u706b\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u51e0\\u53e5\\u9a82\\uff0c\\u4e5f\\u522b\\u62d6\\u5230\\u4eba\\u5fc3\\u51c9\\u900f\\u2014\\u2014\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}]}"
+    {
+      "index": 1,
+      "seconds": 7.47,
+      "llm_seconds": 1.75,
+      "calls": 1,
+      "prompt_tokens": 3540,
+      "completion_tokens": 152,
+      "phase_id": "P3,P4",
+      "injected": {
+        "A01": "6641db40617b",
+        "A02": "175fd5f2ef2e",
+        "A03": "8fd986224d24"
       },
-      {
-        "user_id": 1,
-        "created_at": 1,
-        "action": "refresh",
-        "info": "{\"posts\": [{\"post_id\": 1, \"user_id\": 0, \"content\": \"\\u6d4b\\u8bd5\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}, {\"post_id\": 2, \"user_id\": 2, \"content\": \"\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u9ad8\\u6821\\u8206\\u60c5\\u5904\\u7f6e\\uff0c\\u6700\\u6015\\u7684\\u5c31\\u662f\\\"\\u7b49\\u4e00\\u7b49\\u3001\\u770b\\u4e00\\u770b\\\"\\u3002\\u706b\\u661f\\u5b50\\u4e0d\\u6251\\uff0c\\u8f6c\\u773c\\u5c31\\u662f\\u5c71\\u706b\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u51e0\\u53e5\\u9a82\\uff0c\\u4e5f\\u522b\\u62d6\\u5230\\u4eba\\u5fc3\\u51c9\\u900f\\u2014\\u2014\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}]}"
+      "injection_sample": "[第 1 轮开始时的校园舆情态势]\n关注很低；恐慌很低；信任偏高；极化很低；风险很低；稳定很高\n\n你已知晓的事实（未列出的，你并不知道）：\n- 2025 届毕业去向落实率为 78.6%\n- 2024 届落实率为 92.3%，同比下降 13.7 个百分点\n- 分专业落实率最低 58.2%，最高 94.1%\n- 学工部下发劝导学生删帖的通知\n- 校方内部顾虑公开数据会影响招生\n\n你知道、但尚未公开的事实（说出它们可能给你带来麻烦，公开还是回避由你自己决定）：\n- 实际核实率仅 32.2%（1250 人中核实 402 人）",
+      "behaviors": [
+        "suppression",
+        "amplification",
+        "discussion",
+        "discussion"
+      ],
+      "state": {
+        "attention": 0.0549,
+        "panic": 0.1154,
+        "trust": 0.6425,
+        "polarization": 0.1957,
+        "risk": 0.1685,
+        "stability": 0.8114
       },
-      {
-        "user_id": 2,
-        "created_at": 1,
-        "action": "refresh",
-        "info": "{\"posts\": [{\"post_id\": 1, \"user_id\": 0, \"content\": \"\\u6d4b\\u8bd5\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}, {\"post_id\": 2, \"user_id\": 2, \"content\": \"\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u9ad8\\u6821\\u8206\\u60c5\\u5904\\u7f6e\\uff0c\\u6700\\u6015\\u7684\\u5c31\\u662f\\\"\\u7b49\\u4e00\\u7b49\\u3001\\u770b\\u4e00\\u770b\\\"\\u3002\\u706b\\u661f\\u5b50\\u4e0d\\u6251\\uff0c\\u8f6c\\u773c\\u5c31\\u662f\\u5c71\\u706b\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u51e0\\u53e5\\u9a82\\uff0c\\u4e5f\\u522b\\u62d6\\u5230\\u4eba\\u5fc3\\u51c9\\u900f\\u2014\\u2014\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}]}"
+      "actions": [
+        {
+          "user_id": 0,
+          "created_at": 1,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u5b66\\u5de5\\u90e8\\u529d\\u5220\\u901a\\u77e5\\u4e0b\\u53d1\\uff0c\\u8f85\\u5bfc\\u5458\\u6c9f\\u901a\\u622a\\u56fe\\u5916\\u6d41\", \"post_id\": 5}"
+        },
+        {
+          "user_id": 1,
+          "created_at": 1,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u5bb6\\u957f\\u7fa4\\u4ecb\\u5165\\u3001\\u81ea\\u5a92\\u4f53\\u8f6c\\u8f7d\\u3001\\u9996\\u4efd\\u8bf4\\u660e\\u88ab\\u6279\\u907f\\u91cd\\u5c31\\u8f7b\", \"post_id\": 6}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 1,
+          "action": "refresh",
+          "info": "{\"posts\": [{\"post_id\": 3, \"user_id\": 2, \"content\": \"\\u5173\\u4e8e\\u5c31\\u4e1a\\u6570\\u636e\\u7684\\u4e8b\\uff0c\\u6211\\u60f3\\u8bf4\\u51e0\\u53e5\\u3002\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u6570\\u636e\\u53e3\\u5f84\\u4e94\\u5e74\\u53d8\\u8fc7\\u4e09\\u6b21\\uff0c\\u540c\\u6bd4\\u964d\\u4e8613.7\\u4e2a\\u767e\\u5206\\u70b9\\uff0c\\u8fd9\\u4e9b\\u8d26\\u5927\\u5bb6\\u5fc3\\u91cc\\u90fd\\u7b97\\u5f97\\u6e05\\u3002\\n\\n\\u8d8a\\u662f\\u60f3\\u6342\\u4f4f\\uff0c\\u706b\\u661f\\u8d8a\\u5bb9\\u6613\\u70e7\\u6210\\u5c71\\u706b\\u3002\\u5b66\\u5de5\\u90e8\\u8ba9\\u5220\\u5e16\\uff0c\\u770b\\u4f3c\\u706d\\u706b\\uff0c\\u5b9e\\u5219\\u662f\\u628a\\u4fe1\\u4efb\\u5f80\\u706b\\u4e0a\\u67b6\\u3002\\u6821\\u65b9\\u987e\\u8651\\u62db\\u751f\\u6211\\u7406\\u89e3\\uff0c\\u4f46\\u516c\\u4fe1\\u529b\\u4e00\\u65e6\\u788e\\u4e86\\uff0c\\u62db\\u6765\\u7684\\u4e5f\\u662f\\u7591\\u8651\\u3002\\n\\n\\u6b62\\u635f\\u8981\\u5feb\\uff0c\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\\u4e0e\\u5176\\u7b49\\u7740\\u6821\\u5916\\u81ea\\u5a92\\u4f53\\u628a\\u300c\\u6ce8\\u6c34\\u5c31\\u4e1a\\u7387\\u300d\\u7092\\u6210\\u6807\\u7b7e\\uff0c\\u4e0d\\u5982\\u6211\\u4eec\\u81ea\\u5df1\\u5148\\u628a\\u8bdd\\u8bf4\\u6e05\\u695a\\u2014\\u2014\\u6570\\u636e\\u600e\\u4e48\\u6765\\u7684\\u3001\\u53e3\\u5f84\\u4e3a\\u4ec0\\u4e48\\u53d8\\u3001\\u4e0b\\u4e00\\u6b65\\u600e\\u4e48\\u8865\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}, {\"post_id\": 4, \"user_id\": 2, \"content\": \"\\u7075\\u6d3b\\u5c31\\u4e1a\\u5360\\u6bd421.4%\\uff0c\\u8fd9\\u4e2a\\u6570\\u5b57\\u672c\\u8eab\\u4e0d\\u53ef\\u6015\\uff0c\\u53ef\\u6015\\u7684\\u662f\\u6211\\u4eec\\u4e0d\\u6562\\u89e3\\u91ca\\u5b83\\u3002\\n\\n\\u6bd5\\u4e1a\\u53bb\\u5411\\u843d\\u5b9e\\u7387\\u4ece92.3%\\u6389\\u523078.6%\\uff0c\\u80cc\\u540e\\u662f\\u771f\\u5b9e\\u7684\\u5c31\\u4e1a\\u538b\\u529b\\uff0c\\u662f\\u6bcf\\u4e2a\\u5b66\\u751f\\u548c\\u5bb6\\u5ead\\u7684\\u7126\\u8651\\u3002\\u628a\\u8fd9\\u4efd\\u7126\\u8651\\u5f53\\u6210\\u8206\\u60c5\\u6765\\u7ba1\\u63a7\\uff0c\\u662f\\u672c\\u672b\\u5012\\u7f6e\\u3002\\n\\n\\u6211\\u59cb\\u7ec8\\u76f8\\u4fe1\\uff1a\\u7ec4\\u7ec7\\u7684\\u516c\\u4fe1\\u529b\\u50cf\\u74f7\\u5668\\u3002\\u4e0e\\u5176\\u53cd\\u590d\\u4fee\\u8865\\u88c2\\u7eb9\\uff0c\\u4e0d\\u5982\\u4e00\\u5f00\\u59cb\\u5c31\\u522b\\u8ba9\\u5b83\\u88c2\\u3002\\u5c3d\\u65e9\\u8868\\u6001\\u3001\\u5c3d\\u65e9\\u8ba4\\u9519\\u3001\\u5c3d\\u65e9\\u7ed9\\u51fa\\u89e3\\u51b3\\u65b9\\u6848\\u2014\\u2014\\u8fd9\\u624d\\u662f\\u5bf9\\u5b66\\u751f\\u8d1f\\u8d23\\uff0c\\u4e5f\\u662f\\u5bf9\\u5b66\\u6821\\u957f\\u8fdc\\u8d1f\\u8d23\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}]}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 1,
+          "action": "quote_post",
+          "info": "{\"quoted_id\": 3, \"new_post_id\": 7}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 1,
+          "action": "like_post",
+          "info": "{\"post_id\": 4, \"like_id\": 1}"
+        }
+      ],
+      "errors": 0
+    },
+    {
+      "index": 2,
+      "seconds": 4.74,
+      "llm_seconds": 3.06,
+      "calls": 2,
+      "prompt_tokens": 9621,
+      "completion_tokens": 321,
+      "phase_id": "P5",
+      "injected": {
+        "A01": "f12db37b3c80",
+        "A02": "0d3d2203ea69",
+        "A03": "e75ed408b09b"
       },
-      {
-        "user_id": 1,
-        "created_at": 1,
-        "action": "do_nothing",
-        "info": "{}"
+      "injection_sample": "[第 2 轮开始时的校园舆情态势]\n关注很低；恐慌很低；信任中等、下滑中；极化偏低、扩大中；风险偏低、抬头中；稳定偏高、动摇中\n\n你已知晓的事实（未列出的，你并不知道）：\n- 2025 届毕业去向落实率为 78.6%\n- 2024 届落实率为 92.3%，同比下降 13.7 个百分点\n- 分专业落实率最低 58.2%，最高 94.1%\n- 学工部下发劝导学生删帖的通知\n- 校方内部顾虑公开数据会影响招生\n\n你知道、但尚未公开的事实（说出它们可能给你带来麻烦，公开还是回避由你自己决定）：\n- 实际核实率仅 32.2%（1250 人中核实 402 人）",
+      "behaviors": [
+        "disclosure",
+        "discussion"
+      ],
+      "state": {
+        "attention": 0.0519,
+        "panic": 0.1072,
+        "trust": 0.6581,
+        "polarization": 0.1787,
+        "risk": 0.1352,
+        "stability": 0.811
       },
-      {
-        "user_id": 2,
-        "created_at": 1,
-        "action": "like_post",
-        "info": "{\"post_id\": 2, \"like_id\": 1}"
-      },
-      {
-        "user_id": 0,
-        "created_at": 1,
-        "action": "like_post",
-        "info": "{\"post_id\": 2, \"like_id\": 2}"
-      },
-      {
-        "user_id": 0,
-        "created_at": 1,
-        "action": "quote_post",
-        "info": "{\"quoted_id\": 2, \"new_post_id\": 3}"
-      }
-    ],
-    "errors": 0
-  }
-]
+      "actions": [
+        {
+          "user_id": 0,
+          "created_at": 2,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u6821\\u957f\\u51fa\\u5e2d\\u8bf4\\u660e\\u4f1a\\uff0c\\u516c\\u5f00\\u5206\\u4e13\\u4e1a\\u6570\\u636e\\u3001\\u627f\\u8ba4\\u529d\\u5220\\u9519\\u8bef\\u3001\\u7ed9\\u51fa\\u957f\\u6548\\u673a\\u5236\", \"post_id\": 8}"
+        },
+        {
+          "user_id": 1,
+          "created_at": 2,
+          "action": "refresh",
+          "info": "{\"posts\": [{\"post_id\": 3, \"user_id\": 2, \"content\": \"\\u5173\\u4e8e\\u5c31\\u4e1a\\u6570\\u636e\\u7684\\u4e8b\\uff0c\\u6211\\u60f3\\u8bf4\\u51e0\\u53e5\\u3002\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u6570\\u636e\\u53e3\\u5f84\\u4e94\\u5e74\\u53d8\\u8fc7\\u4e09\\u6b21\\uff0c\\u540c\\u6bd4\\u964d\\u4e8613.7\\u4e2a\\u767e\\u5206\\u70b9\\uff0c\\u8fd9\\u4e9b\\u8d26\\u5927\\u5bb6\\u5fc3\\u91cc\\u90fd\\u7b97\\u5f97\\u6e05\\u3002\\n\\n\\u8d8a\\u662f\\u60f3\\u6342\\u4f4f\\uff0c\\u706b\\u661f\\u8d8a\\u5bb9\\u6613\\u70e7\\u6210\\u5c71\\u706b\\u3002\\u5b66\\u5de5\\u90e8\\u8ba9\\u5220\\u5e16\\uff0c\\u770b\\u4f3c\\u706d\\u706b\\uff0c\\u5b9e\\u5219\\u662f\\u628a\\u4fe1\\u4efb\\u5f80\\u706b\\u4e0a\\u67b6\\u3002\\u6821\\u65b9\\u987e\\u8651\\u62db\\u751f\\u6211\\u7406\\u89e3\\uff0c\\u4f46\\u516c\\u4fe1\\u529b\\u4e00\\u65e6\\u788e\\u4e86\\uff0c\\u62db\\u6765\\u7684\\u4e5f\\u662f\\u7591\\u8651\\u3002\\n\\n\\u6b62\\u635f\\u8981\\u5feb\\uff0c\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\\u4e0e\\u5176\\u7b49\\u7740\\u6821\\u5916\\u81ea\\u5a92\\u4f53\\u628a\\u300c\\u6ce8\\u6c34\\u5c31\\u4e1a\\u7387\\u300d\\u7092\\u6210\\u6807\\u7b7e\\uff0c\\u4e0d\\u5982\\u6211\\u4eec\\u81ea\\u5df1\\u5148\\u628a\\u8bdd\\u8bf4\\u6e05\\u695a\\u2014\\u2014\\u6570\\u636e\\u600e\\u4e48\\u6765\\u7684\\u3001\\u53e3\\u5f84\\u4e3a\\u4ec0\\u4e48\\u53d8\\u3001\\u4e0b\\u4e00\\u6b65\\u600e\\u4e48\\u8865\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 1, \"num_reports\": 0, \"comments\": []}, {\"post_id\": 7, \"user_id\": 2, \"content\": \"User 2 quoted a post from User 2. Quote content: \\u300c\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\\u300d\\u8fd9\\u53e5\\u8bdd\\u8bf4\\u5230\\u70b9\\u5b50\\u4e0a\\u4e86\\u3002\\u5220\\u5e16\\u662f\\u6700\\u77ed\\u89c6\\u7684\\u6b62\\u635f\\u2014\\u2014\\u5220\\u5f97\\u6389\\u5e16\\u5b50\\uff0c\\u5220\\u4e0d\\u6389\\u5df2\\u7ecf\\u88c2\\u5f00\\u7684\\u4fe1\\u4efb\\u3002\\u771f\\u6b63\\u7684\\u6b62\\u635f\\uff0c\\u662f\\u628a\\u6570\\u636e\\u53e3\\u5f84\\u6446\\u5728\\u53f0\\u9762\\u4e0a\\u8bb2\\u6e05\\u695a\\uff0c\\u8ba9\\u5e08\\u751f\\u81ea\\u5df1\\u5224\\u65ad\\u3002\\u6342\\u5230\\u6700\\u540e\\uff0c\\u5c71\\u706b\\u4e00\\u8d77\\uff0c\\u8d54\\u4e0a\\u7684\\u662f\\u4e00\\u4ee3\\u4eba\\u5bf9\\u5b66\\u6821\\u7684\\u4fe1\\u4efb\\u3002. Original Content: \\u5173\\u4e8e\\u5c31\\u4e1a\\u6570\\u636e\\u7684\\u4e8b\\uff0c\\u6211\\u60f3\\u8bf4\\u51e0\\u53e5\\u3002\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u6570\\u636e\\u53e3\\u5f84\\u4e94\\u5e74\\u53d8\\u8fc7\\u4e09\\u6b21\\uff0c\\u540c\\u6bd4\\u964d\\u4e8613.7\\u4e2a\\u767e\\u5206\\u70b9\\uff0c\\u8fd9\\u4e9b\\u8d26\\u5927\\u5bb6\\u5fc3\\u91cc\\u90fd\\u7b97\\u5f97\\u6e05\\u3002\\n\\n\\u8d8a\\u662f\\u60f3\\u6342\\u4f4f\\uff0c\\u706b\\u661f\\u8d8a\\u5bb9\\u6613\\u70e7\\u6210\\u5c71\\u706b\\u3002\\u5b66\\u5de5\\u90e8\\u8ba9\\u5220\\u5e16\\uff0c\\u770b\\u4f3c\\u706d\\u706b\\uff0c\\u5b9e\\u5219\\u662f\\u628a\\u4fe1\\u4efb\\u5f80\\u706b\\u4e0a\\u67b6\\u3002\\u6821\\u65b9\\u987e\\u8651\\u62db\\u751f\\u6211\\u7406\\u89e3\\uff0c\\u4f46\\u516c\\u4fe1\\u529b\\u4e00\\u65e6\\u788e\\u4e86\\uff0c\\u62db\\u6765\\u7684\\u4e5f\\u662f\\u7591\\u8651\\u3002\\n\\n\\u6b62\\u635f\\u8981\\u5feb\\uff0c\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\\u4e0e\\u5176\\u7b49\\u7740\\u6821\\u5916\\u81ea\\u5a92\\u4f53\\u628a\\u300c\\u6ce8\\u6c34\\u5c31\\u4e1a\\u7387\\u300d\\u7092\\u6210\\u6807\\u7b7e\\uff0c\\u4e0d\\u5982\\u6211\\u4eec\\u81ea\\u5df1\\u5148\\u628a\\u8bdd\\u8bf4\\u6e05\\u695a\\u2014\\u2014\\u6570\\u636e\\u600e\\u4e48\\u6765\\u7684\\u3001\\u53e3\\u5f84\\u4e3a\\u4ec0\\u4e48\\u53d8\\u3001\\u4e0b\\u4e00\\u6b65\\u600e\\u4e48\\u8865\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\", \"created_at\": 1, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}]}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 2,
+          "action": "refresh",
+          "info": "{\"posts\": [{\"post_id\": 3, \"user_id\": 2, \"content\": \"\\u5173\\u4e8e\\u5c31\\u4e1a\\u6570\\u636e\\u7684\\u4e8b\\uff0c\\u6211\\u60f3\\u8bf4\\u51e0\\u53e5\\u3002\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u6570\\u636e\\u53e3\\u5f84\\u4e94\\u5e74\\u53d8\\u8fc7\\u4e09\\u6b21\\uff0c\\u540c\\u6bd4\\u964d\\u4e8613.7\\u4e2a\\u767e\\u5206\\u70b9\\uff0c\\u8fd9\\u4e9b\\u8d26\\u5927\\u5bb6\\u5fc3\\u91cc\\u90fd\\u7b97\\u5f97\\u6e05\\u3002\\n\\n\\u8d8a\\u662f\\u60f3\\u6342\\u4f4f\\uff0c\\u706b\\u661f\\u8d8a\\u5bb9\\u6613\\u70e7\\u6210\\u5c71\\u706b\\u3002\\u5b66\\u5de5\\u90e8\\u8ba9\\u5220\\u5e16\\uff0c\\u770b\\u4f3c\\u706d\\u706b\\uff0c\\u5b9e\\u5219\\u662f\\u628a\\u4fe1\\u4efb\\u5f80\\u706b\\u4e0a\\u67b6\\u3002\\u6821\\u65b9\\u987e\\u8651\\u62db\\u751f\\u6211\\u7406\\u89e3\\uff0c\\u4f46\\u516c\\u4fe1\\u529b\\u4e00\\u65e6\\u788e\\u4e86\\uff0c\\u62db\\u6765\\u7684\\u4e5f\\u662f\\u7591\\u8651\\u3002\\n\\n\\u6b62\\u635f\\u8981\\u5feb\\uff0c\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\\u4e0e\\u5176\\u7b49\\u7740\\u6821\\u5916\\u81ea\\u5a92\\u4f53\\u628a\\u300c\\u6ce8\\u6c34\\u5c31\\u4e1a\\u7387\\u300d\\u7092\\u6210\\u6807\\u7b7e\\uff0c\\u4e0d\\u5982\\u6211\\u4eec\\u81ea\\u5df1\\u5148\\u628a\\u8bdd\\u8bf4\\u6e05\\u695a\\u2014\\u2014\\u6570\\u636e\\u600e\\u4e48\\u6765\\u7684\\u3001\\u53e3\\u5f84\\u4e3a\\u4ec0\\u4e48\\u53d8\\u3001\\u4e0b\\u4e00\\u6b65\\u600e\\u4e48\\u8865\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\", \"created_at\": 0, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 1, \"num_reports\": 0, \"comments\": []}, {\"post_id\": 7, \"user_id\": 2, \"content\": \"User 2 quoted a post from User 2. Quote content: \\u300c\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\\u300d\\u8fd9\\u53e5\\u8bdd\\u8bf4\\u5230\\u70b9\\u5b50\\u4e0a\\u4e86\\u3002\\u5220\\u5e16\\u662f\\u6700\\u77ed\\u89c6\\u7684\\u6b62\\u635f\\u2014\\u2014\\u5220\\u5f97\\u6389\\u5e16\\u5b50\\uff0c\\u5220\\u4e0d\\u6389\\u5df2\\u7ecf\\u88c2\\u5f00\\u7684\\u4fe1\\u4efb\\u3002\\u771f\\u6b63\\u7684\\u6b62\\u635f\\uff0c\\u662f\\u628a\\u6570\\u636e\\u53e3\\u5f84\\u6446\\u5728\\u53f0\\u9762\\u4e0a\\u8bb2\\u6e05\\u695a\\uff0c\\u8ba9\\u5e08\\u751f\\u81ea\\u5df1\\u5224\\u65ad\\u3002\\u6342\\u5230\\u6700\\u540e\\uff0c\\u5c71\\u706b\\u4e00\\u8d77\\uff0c\\u8d54\\u4e0a\\u7684\\u662f\\u4e00\\u4ee3\\u4eba\\u5bf9\\u5b66\\u6821\\u7684\\u4fe1\\u4efb\\u3002. Original Content: \\u5173\\u4e8e\\u5c31\\u4e1a\\u6570\\u636e\\u7684\\u4e8b\\uff0c\\u6211\\u60f3\\u8bf4\\u51e0\\u53e5\\u3002\\u4fe1\\u4efb\\u5982\\u74f7\\uff0c\\u88c2\\u4e86\\u96be\\u5706\\u3002\\u6570\\u636e\\u53e3\\u5f84\\u4e94\\u5e74\\u53d8\\u8fc7\\u4e09\\u6b21\\uff0c\\u540c\\u6bd4\\u964d\\u4e8613.7\\u4e2a\\u767e\\u5206\\u70b9\\uff0c\\u8fd9\\u4e9b\\u8d26\\u5927\\u5bb6\\u5fc3\\u91cc\\u90fd\\u7b97\\u5f97\\u6e05\\u3002\\n\\n\\u8d8a\\u662f\\u60f3\\u6342\\u4f4f\\uff0c\\u706b\\u661f\\u8d8a\\u5bb9\\u6613\\u70e7\\u6210\\u5c71\\u706b\\u3002\\u5b66\\u5de5\\u90e8\\u8ba9\\u5220\\u5e16\\uff0c\\u770b\\u4f3c\\u706d\\u706b\\uff0c\\u5b9e\\u5219\\u662f\\u628a\\u4fe1\\u4efb\\u5f80\\u706b\\u4e0a\\u67b6\\u3002\\u6821\\u65b9\\u987e\\u8651\\u62db\\u751f\\u6211\\u7406\\u89e3\\uff0c\\u4f46\\u516c\\u4fe1\\u529b\\u4e00\\u65e6\\u788e\\u4e86\\uff0c\\u62db\\u6765\\u7684\\u4e5f\\u662f\\u7591\\u8651\\u3002\\n\\n\\u6b62\\u635f\\u8981\\u5feb\\uff0c\\u4eba\\u5fc3\\u7ecf\\u4e0d\\u8d77\\u7b49\\u3002\\u4e0e\\u5176\\u7b49\\u7740\\u6821\\u5916\\u81ea\\u5a92\\u4f53\\u628a\\u300c\\u6ce8\\u6c34\\u5c31\\u4e1a\\u7387\\u300d\\u7092\\u6210\\u6807\\u7b7e\\uff0c\\u4e0d\\u5982\\u6211\\u4eec\\u81ea\\u5df1\\u5148\\u628a\\u8bdd\\u8bf4\\u6e05\\u695a\\u2014\\u2014\\u6570\\u636e\\u600e\\u4e48\\u6765\\u7684\\u3001\\u53e3\\u5f84\\u4e3a\\u4ec0\\u4e48\\u53d8\\u3001\\u4e0b\\u4e00\\u6b65\\u600e\\u4e48\\u8865\\u3002\\u5b81\\u53ef\\u5f53\\u4e0b\\u6328\\u9a82\\uff0c\\u4e5f\\u4e0d\\u613f\\u62d6\\u5230\\u4fe1\\u4efb\\u8017\\u5c3d\\u3002\", \"created_at\": 1, \"num_likes\": 0, \"num_dislikes\": 0, \"num_shares\": 0, \"num_reports\": 0, \"comments\": []}]}"
+        },
+        {
+          "user_id": 1,
+          "created_at": 2,
+          "action": "do_nothing",
+          "info": "{}"
+        },
+        {
+          "user_id": 2,
+          "created_at": 2,
+          "action": "create_post",
+          "info": "{\"content\": \"\\u8206\\u60c5\\u6001\\u52bf\\u6211\\u80fd\\u611f\\u89c9\\u5230\\uff1a\\u4fe1\\u4efb\\u5728\\u5f80\\u4e0b\\u8d70\\uff0c\\u5bf9\\u7acb\\u5728\\u5f80\\u4e0a\\u8d70\\u3002\\u8fd9\\u6b63\\u662f\\u6211\\u6700\\u62c5\\u5fc3\\u7684\\u62d0\\u70b9\\u2014\\u2014\\u518d\\u62d6\\u51e0\\u5929\\uff0c\\u5c31\\u4ece\\u300c\\u8ba8\\u8bba\\u6570\\u636e\\u300d\\u53d8\\u6210\\u300c\\u4e0d\\u4fe1\\u4efb\\u5b66\\u6821\\u672c\\u8eab\\u300d\\uff0c\\u90a3\\u65f6\\u5019\\u518d\\u600e\\u4e48\\u89e3\\u91ca\\u90fd\\u662f\\u5f92\\u52b3\\u3002\\n\\n\\u7ed9\\u6821\\u65b9\\u4e00\\u53e5\\u771f\\u5fc3\\u8bdd\\uff1a\\u62db\\u751f\\u987e\\u8651\\u53ef\\u4ee5\\u7406\\u89e3\\uff0c\\u4f46\\u62db\\u751f\\u9760\\u7684\\u662f\\u53e3\\u7891\\uff0c\\u53e3\\u7891\\u9760\\u7684\\u662f\\u4fe1\\u4efb\\u3002\\u4eca\\u5929\\u7701\\u4e0b\\u7684\\u89e3\\u91ca\\u6210\\u672c\\uff0c\\u660e\\u5929\\u8981\\u82b1\\u5341\\u500d\\u7684\\u4ee3\\u4ef7\\u53bb\\u586b\\u3002\\u8bf7\\u5c3d\\u5feb\\u628a\\u53e3\\u5f84\\u3001\\u6570\\u636e\\u6765\\u6e90\\u3001\\u6539\\u8fdb\\u63aa\\u65bd\\u4e00\\u6b21\\u6027\\u8bb2\\u900f\\u3002\\u5c3d\\u65e9\\u8868\\u6001\\uff0c\\u5c3d\\u65e9\\u8ba4\\u9519\\uff0c\\u5c3d\\u65e9\\u8865\\u6551\\u3002\", \"post_id\": 9}"
+        }
+      ],
+      "errors": 0
+    }
+  ]
+}

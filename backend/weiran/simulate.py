@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
@@ -38,6 +39,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import REPO_ROOT, ConfigError, load_config
+from .perception import (
+    Knowledge,
+    KnowledgeError,
+    active_phase_by_round,
+    inject_round_context,
+    install_injection,
+    load_knowledge,
+    load_phases,
+    phase_schedule,
+)
+from .profiles import DEFAULT_SCENARIO
 from .stance import StanceClassifier
 from .world_state import DIMENSIONS, WorldState, WorldStateEngine
 
@@ -70,6 +82,12 @@ class RoundLog:
     # 世界状态：本轮识别出的行为构成，以及推进后的六维取值。
     behaviors: list[str] = field(default_factory=list)
     state: dict[str, float] = field(default_factory=dict)
+    # 感知层。**这份记录是必须的**：「注入没生效」与「注入生效了但没差别」
+    # 在六维曲线上一模一样，只有这里能把两者分开。曲线平的时候第一件事
+    # 就是看它 —— 若注入次数是 0，问题在接线，不在模型。
+    phase_id: str = ""                  # 本轮触发的阶段（P1..P5），无则空
+    injected: dict[str, str] = field(default_factory=dict)   # actor_id -> 块摘要
+    injection_sample: str = ""          # 首个非空块全文，供人眼核对措辞
 
 
 @dataclass
@@ -78,6 +96,14 @@ class SimulationResult:
     db_path: Path | None = None
     total_seconds: float = 0.0
     stance_summary: str = ""
+    # 运行口径。**落盘时必须一起写出去** —— 压缩模式下的曲线与 round=day
+    # 不可比（激励项按步累加，见 days_per_round 的注释），一份不知道自己
+    # 是压缩过的结果文件，日后必然被当成 round=day 的结果引用。
+    days_per_round: float = 1.0
+    compressed: bool = False
+    phases_on: bool = True
+    knowledge_on: bool = True
+    feedback_on: bool = True
 
     @property
     def total_actions(self) -> int:
@@ -479,6 +505,10 @@ async def _run(
     max_tokens: int,
     seed_text: str = "",
     world_state: bool = True,
+    scenario_dir: Path | None = None,
+    phases_on: bool = True,
+    knowledge_on: bool = True,
+    feedback_on: bool = True,
     llm=None,
     stance_cache: Path | None = None,
     temperature: float | None = None,
@@ -504,12 +534,34 @@ async def _run(
     model = build_model(config, thinking=thinking, max_tokens=max_tokens,
                         temperature=temperature, seed=seed)
 
+    # 注入插槽必须在建图**之前**装上 —— 只留一个安装时间点，好排查。
+    # 类级补丁对已存在实例也生效，但两个安装点会让「到底装上了没有」变难回答。
+    if feedback_on or knowledge_on:
+        install_injection()
+
     gen = generate_twitter_agent_graph if is_twitter else generate_reddit_agent_graph
     graph = await gen(profile_path=str(profile_file), model=model, available_actions=actions)
 
     agents_list = [a for _, a in graph.get_agents()]
     if agents is not None:
         agents_list = agents_list[:agents]
+
+    # 知情映射。**在建图之后、花钱之前加载** —— 画像文件与 actor_knowledge.json
+    # 不同源是真缺陷，要在打第一发 LLM 之前就炸，而不是跑到第 3 轮才发现。
+    knowledge: Knowledge | None = None
+    if knowledge_on:
+        knowledge = load_knowledge(out_dir, scenario_dir)
+        missing = [a.social_agent_id for a in agents_list
+                   if a.social_agent_id not in knowledge.by_user_id]
+        if missing:
+            raise KnowledgeError(
+                f"这些 agent 的 social_agent_id 在 actor_knowledge.json 里没有"
+                f"对应角色：{missing}\n"
+                "说明 profile 文件与知情映射不同源（一个重跑过、另一个没有），"
+                "先重跑 python -m weiran.profiles。"
+                "\n（注意：反查走 social_agent_id，不是 user_info.user_name —— "
+                "后者实测为 None）"
+            )
 
     env = oasis.make(
         agent_graph=graph,
@@ -524,6 +576,11 @@ async def _run(
 
     result = SimulationResult(db_path=db_path)
     started = time.monotonic()
+    result.knowledge_on = knowledge_on
+    result.feedback_on = feedback_on
+    # `result.phases_on` 在阶段表那段之后才赋值 —— 那里可能会因为轮数不足
+    # 把 phases_on 降级成 False，在这里赋值会让落盘的 meta 声称「阶段开着」，
+    # 而实际一轮都没注入。落盘口径错了比不落盘更坏。
 
     # **reset 也会往 trace 里写。** OASIS 在 reset 阶段为每个 agent 记一条
     # `sign_up`，只有真正 step 出来的才是本轮动作。第一次跑 3 个 agent 的
@@ -540,11 +597,59 @@ async def _run(
     # 时间线上什么也没有，agent「什么都不做」是完全理性的选择，
     # 于是世界状态引擎拿到的是一条平线。
     #
-    # 所以本场景把《就业质量报告》公开这一**种子事件**在第 0 轮注入：
-    # 由第一个 agent 走 ManualAction（不经过 LLM，事件内容是给定的），
-    # 其余 agent 照常走 LLMAction 去反应。从第 1 轮起全员走 LLM ——
-    # 注入的是「起点」，之后怎么演化仍然由 agent 自己决定。
-    seeder = agents_list[0] if (seed_text and agents_list) else None
+    # 事件来源有两条，**阶段表优先**：
+    #
+    #   - **阶段表（默认）**：从金标 `reference_data.json` 的 `phases` 段读
+    #     `day` 与 `trigger`，把 day 映射到轮号。本场景为
+    #     P1/D0、P2/D0+2、P3/D0+5、P4/D0+8、P5/D0+14。
+    #     **注入的是场景作者编写的事件标题（trigger），不是抓取内容。**
+    #     已核对：`seed_materials/0N_*.md` 是带元数据表格的多段文档
+    #     （材料 3-A 通知 / 3-B 截图…），**不是帖子形态**，整份当
+    #     `CREATE_POST` 注入反而不真实。
+    #   - **`--seed-text`（退化路径）**：没有可用阶段表时用，只在第 0 轮发一条。
+    #
+    # **走「事件进世界」，不走「直接改状态」。** `ws_engine.step(extra=...)`
+    # 已经存在、注释也写着「手动注入事件」，但本项目刻意**不用**它：事件必须
+    # 以一条帖子的形式进入时间线，六维的变化要**经由 agent 的反应**发生。
+    # 直接给维度加激励等于「我们知道该涨多少」，正是本项目批评过的
+    # 「看着答案推过程」。（`extra` 留作日后「外部施加 vs 社会传播」的消融对照。）
+    #
+    # 事件由 `ManualAction` 发出、**不经过 LLM**，所以执行者拿不到感知注入 ——
+    # 这是对的：它在制造事件，不需要被告知态势。免得日后被当成 bug。
+    schedule: dict[int, tuple] = {}
+    phase_by_round: dict[int, str] = {}
+    dpr, compressed = 1.0, False
+    if phases_on and scenario_dir is not None and rounds < 2:
+        # 1 轮没法把 5 个阶段映射上去（至少需要「起点 + 一个后续」）。
+        # **降级要出声**：默默关掉一个默认开启的开关，正是本项目专门猎杀的
+        # 「静默失效」——用户会以为阶段注入跑了，只是没效果。
+        print("  ⚠️ 只有 1 轮，阶段无法映射到轮号 —— **本次不注入阶段事件**。"
+              "要阶段就 --rounds ≥2，要明确关掉就 --no-phases。")
+        phases_on = False
+    if phases_on and scenario_dir is not None:
+        phase_list = load_phases(scenario_dir)
+        schedule, dpr, compressed = phase_schedule(phase_list, rounds)
+        # 每一轮归属到「当时生效的最近一个阶段」，只用于给引擎识别出的事件打标签。
+        phase_by_round = active_phase_by_round(phase_list, rounds, dpr)
+
+    if compressed:
+        # 压缩**不是「精度低一点」**：弛豫项 `exp(-k·dt)` 可以复合，但激励项
+        # 按步累加 —— 同样 6 天，拆成 6 步会激励 6 次、合成 1 步只激励 1 次。
+        # 两条曲线不可比，所以要在日志与落盘里都标出来。
+        full = max(p.day for p in phase_list) + 1
+        print(f"  ⚠️ 轮数 {rounds} 少于 {full}，已压缩：每轮代表 {dpr:.2f} 天。\n"
+              f"     压缩曲线与 round=day（--rounds {full}）**不可比**，"
+              "只适合省钱冒烟。")
+
+    seeder = (agents_list[0]
+              if (seed_text and agents_list and not schedule) else None)
+    if seed_text and schedule:
+        print("  （同时给了 --seed-text 与阶段表：**阶段表优先**，种子文本本次不用）")
+
+    # 口径在这里才定稿 —— 上面可能刚把 phases_on 降级成 False。
+    result.phases_on = phases_on
+    result.days_per_round = dpr
+    result.compressed = compressed
 
     # 世界状态引擎接进逐轮循环 —— **这一步之前，六维曲线只在离线重放上跑过**。
     # 每一轮：读 trace → 还原行为类型 → 推进六维 → 存进 RoundLog。
@@ -561,6 +666,7 @@ async def _run(
         else out_dir / "stance_cache.json",
     )
 
+    prev_state: dict[str, float] | None = None
     for i in range(rounds):
         t0 = time.monotonic()
         before = (stats.calls, stats.seconds,
@@ -568,10 +674,45 @@ async def _run(
         entry = RoundLog(index=i)
 
         step: dict = {a: LLMAction() for a in agents_list}
-        if i == 0 and seeder is not None:
-            step[seeder] = ManualAction(
-                ActionType.CREATE_POST, {"content": seed_text}
+        events = schedule.get(i, ())
+        if events and agents_list:
+            # 压缩模式下同一轮会落进多个阶段，**全部保留**（由不同 agent 各发
+            # 一条），不合并、不丢弃 —— 丢掉一个阶段等于悄悄改掉场景。
+            # 只有一个 agent 时它们会叠在同一条帖子里，这是压缩模式的已知代价。
+            by_agent: dict = {}
+            for k, ph in enumerate(events):
+                a = agents_list[k % len(agents_list)]
+                prev_txt = by_agent.get(a)
+                by_agent[a] = (ph.trigger if prev_txt is None
+                               else f"{prev_txt}\n\n{ph.trigger}")
+            for a, txt in by_agent.items():
+                step[a] = ManualAction(ActionType.CREATE_POST, {"content": txt})
+            entry.phase_id = ",".join(p.phase_id for p in events)
+        elif i == 0 and seeder is not None:
+            step[seeder] = ManualAction(ActionType.CREATE_POST,
+                                        {"content": seed_text})
+
+        # ---- 闭环的另一半：把当前态势与该角色的知情范围回注给每个 agent ----
+        # **必须在 env.step 之前** —— step 内部 asyncio.gather 一发起就读这些属性。
+        #
+        # `state` 是本轮**开始时**的六维取值，`prev` 是上一轮开始时的，所以
+        # 方向词描述的是「上一轮里变了多少」，而不是「距离基线有多远」。
+        cur_state = ws_state.as_dict() if world_state else {}
+        if agents_list:
+            blocks = inject_round_context(
+                agents_list, round_index=i, state=cur_state, prev=prev_state,
+                knowledge=knowledge, feedback=feedback_on,
+                knowledge_on=knowledge_on,
             )
+            nonempty = {k: v for k, v in blocks.items() if v}
+            # 存摘要而非全文：27 agent × 15 轮 × 每条几百字会把落盘 JSON 撑成
+            # 几百 KB，而这里唯一的用途是「证明注入逐轮在变、且各人不同」。
+            # 全文留一份样本供人眼核对措辞。
+            entry.injected = {k: hashlib.sha1(v.encode("utf-8")).hexdigest()[:12]
+                              for k, v in nonempty.items()}
+            entry.injection_sample = next(iter(nonempty.values()), "")
+        prev_state = cur_state or None
+
         try:
             await env.step(step)
         except Exception as exc:  # noqa: BLE001
@@ -591,9 +732,19 @@ async def _run(
         action_texts = texts_from_actions(new, load_posts(db_path))
         entry.behaviors = stance.classify_many(action_texts)
         if world_state:
-            step = ws_engine.step(ws_state, entry.behaviors, dt=1.0,
-                                  phase_id=f"R{i}")
-            ws_state = step.state_after
+            # 阶段标签有两个来源，**这两个是不同的问句**，压缩模式下会不一致：
+            #   - `entry.phase_id`：这一轮**注入**了哪个阶段的事件（只有少数轮有）
+            #   - `phase_by_round`：这一轮**处在**哪个阶段（每一轮都有）
+            # 轮=天（--rounds 15）时两者恒等，已在测试里钉住。压缩时可能差一个
+            # ——例如 7 轮（每轮 2.33 天）的第 2 轮跨 day 4.67~7.0，注入的是
+            # day 5 的 P3，而起点仍在 P2 的地盘里。两个说法都对，但同一个日志里
+            # 冒出两个「阶段」会让人以为是 bug，所以这里**优先用注入的那个**：
+            # 本轮的引擎事件就是随这个事件发生的，标成 P3 与日志一致。
+            engine_phase = (entry.phase_id.split(",")[0] if entry.phase_id
+                            else phase_by_round.get(i) or f"R{i}")
+            advance = ws_engine.step(ws_state, entry.behaviors, dt=dpr,
+                                     phase_id=engine_phase)
+            ws_state = advance.state_after
             entry.state = ws_state.as_dict()
 
         result.rounds.append(entry)
@@ -605,7 +756,17 @@ async def _run(
         print(f"  轮 {i}: 墙钟 {entry.seconds:6.1f}s  "
               f"LLM {entry.llm_seconds:6.1f}s / {entry.calls} 次  "
               f"动作 {len(new)} 条{tok}"
-              + (f"  错误 {entry.errors}" if entry.errors else ""))
+              + (f"  错误 {entry.errors}" if entry.errors else "")
+              + (f"  [阶段 {entry.phase_id}]" if entry.phase_id else ""))
+        # 感知层的可见证据。**这行是「闭环到底闭没闭上」的唯一现场答案** ——
+        # 六维曲线平的时候，第一件事是看这里是不是 0；若不是 0，问题在模型，
+        # 若是 0，问题在接线。
+        if agents_list:
+            perf = f"         感知 注入 {len(entry.injected)}/{len(agents_list)} 个 agent"
+            if entry.injection_sample:
+                perf += ("  · 样本「"
+                         + entry.injection_sample.replace("\n", " / ")[:56] + "…」")
+            print(perf)
         if entry.behaviors:
             kinds = Counter(entry.behaviors)
             print("         行为 " + " ".join(
@@ -642,11 +803,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="**同时**是输出上限与 camel 的上下文上限，见 build_model")
     ap.add_argument("--inspect-db", action="store_true",
                     help="结束后打印 OASIS 的库结构（首次接入时用）")
+    ap.add_argument("--scenario", default=DEFAULT_SCENARIO,
+                    help="场景目录（读 phases 与 facts）。与 profiles 用同一个默认值")
     ap.add_argument("--seed-text", default="",
-                    help="第 0 轮注入的种子事件全文（不注入则时间线为空，"
-                         "agent 会全部 do_nothing）")
+                    help="退化路径：只发一条种子事件、只在第 0 轮。"
+                         "**默认不用** —— 有阶段表时阶段表优先；"
+                         "只有在 --no-phases 或场景无 phases 段时才生效")
     ap.add_argument("--no-world-state", action="store_true",
                     help="只跑引擎，不推进六维状态（对照用）")
+    ap.add_argument("--no-phases", action="store_true",
+                    help="不注入阶段事件（对照用）。此时时间线只剩 --seed-text")
+    ap.add_argument("--no-knowledge", action="store_true",
+                    help="不回注知情范围（消融对照用）。差异化感知的另一半")
+    ap.add_argument("--no-feedback", action="store_true",
+                    help="不回注六维态势（消融对照用）。闭环的另一半")
     ap.add_argument("--keyword-stance", action="store_true",
                     help="归类退回关键词表（不发 LLM）。用于离线复跑："
                          "缓存已存在时两者结果相同，缓存缺失时关键词表读不准")
@@ -668,6 +838,9 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out)
     if not out_dir.is_absolute():
         out_dir = REPO_ROOT / out_dir
+    scenario_dir = Path(args.scenario)
+    if not scenario_dir.is_absolute():
+        scenario_dir = REPO_ROOT / scenario_dir
 
     # 命令行显式传参优先；没传才回落到 .env 的旋钮。
     # 回落时**把来源标出来** —— 「我明明设了 5 个 agent，怎么跑了 27 个」
@@ -684,6 +857,13 @@ def main(argv: list[str] | None = None) -> int:
           f"平台={args.platform} · 轮数={rounds} · agent={agents}")
     for line in src:
         print(f"  （{line}；命令行显式传参会覆盖它）")
+    # 把「这一轮哪些开关是开的」摆在最前面。默认全开是有意为之（闭环本该默认
+    # 闭上），但同一条命令今天的输出与昨天**不同** —— 不写出来，旧结论与新结果
+    # 对不上时没人知道为什么。
+    print("  闭环：阶段事件={} · 态势回注={} · 知情回注={}".format(
+        "关" if args.no_phases else "开",
+        "关" if args.no_feedback else "开",
+        "关" if args.no_knowledge else "开"))
 
     # 归类用独立的客户端：它要的是稳定与便宜，不需要推理。
     classifier_llm = None
@@ -697,6 +877,10 @@ def main(argv: list[str] | None = None) -> int:
         thinking=args.thinking, max_tokens=args.max_tokens,
         seed_text=args.seed_text,
         world_state=not args.no_world_state,
+        scenario_dir=scenario_dir,
+        phases_on=not args.no_phases,
+        knowledge_on=not args.no_knowledge,
+        feedback_on=not args.no_feedback,
         llm=classifier_llm,
         stance_cache=None if args.no_stance_cache else out_dir / "stance_cache.json",
         temperature=args.temperature,
@@ -724,15 +908,56 @@ def main(argv: list[str] | None = None) -> int:
         # 墙钟远大于 LLM 时间，时间花在了别处，而不是「模型慢」。
         print("  ⚠️ 墙钟远超 LLM 时间，差额花在等待/调度/重试上，值得查")
 
+    # 注入侧的同类检查：**0 次注入要当异常信号**。理由同上 ——
+    # 「注入没生效」与「注入生效了但没差别」在六维曲线上一模一样。
+    #
+    # 「期望有注入」不是「开关没全关」：`--no-world-state` 时态势是空的，
+    # 就算 `feedback` 开着也渲染不出内容。少了这一条，
+    # `--no-world-state --no-knowledge` 会天天报假警。
+    expect_injection = (not args.no_knowledge) or (
+        not args.no_feedback and not args.no_world_state)
+    total_inj = sum(len(r.injected) for r in result.rounds)
+    if expect_injection and total_inj == 0:
+        print("  ⚠️ 一次注入都没发生 —— 感知层没接上。"
+              "此时任何「曲线没变化」的结论都不成立")
+    elif total_inj:
+        print(f"感知：累计注入 {total_inj} 次"
+              f"（{len(result.rounds)} 轮，每轮最多 {agents} 个 agent）")
+
     out_file = out_dir / f"{args.platform}_rounds.json"
     out_file.write_text(
         json.dumps(
-            [{"index": r.index, "seconds": round(r.seconds, 2),
-              "llm_seconds": r.llm_seconds, "calls": r.calls,
-              "prompt_tokens": r.prompt_tokens,
-              "completion_tokens": r.completion_tokens,
-              "behaviors": r.behaviors, "state": r.state,
-              "actions": r.actions, "errors": r.errors} for r in result.rounds],
+            {
+                # 口径写在文件里，而不是只留在终端上。一份不知道自己是不是
+                # 压缩过的结果，日后必然被当成 round=day 的结果引用。
+                "meta": {
+                    "rounds": len(result.rounds),
+                    "agents": agents,
+                    "platform": args.platform,
+                    "seed_text": args.seed_text,
+                    "days_per_round": result.days_per_round,
+                    "compressed": result.compressed,
+                    "comparable_to_round_day": not result.compressed,
+                    "phases_on": result.phases_on,
+                    "knowledge_on": result.knowledge_on,
+                    "feedback_on": result.feedback_on,
+                    "world_state": not args.no_world_state,
+                    "total_seconds": round(result.total_seconds, 2),
+                    "total_actions": result.total_actions,
+                },
+                "rounds": [
+                    {"index": r.index, "seconds": round(r.seconds, 2),
+                     "llm_seconds": r.llm_seconds, "calls": r.calls,
+                     "prompt_tokens": r.prompt_tokens,
+                     "completion_tokens": r.completion_tokens,
+                     "phase_id": r.phase_id,
+                     "injected": r.injected,
+                     "injection_sample": r.injection_sample,
+                     "behaviors": r.behaviors, "state": r.state,
+                     "actions": r.actions, "errors": r.errors}
+                    for r in result.rounds
+                ],
+            },
             ensure_ascii=False, indent=2,
         ),
         encoding="utf-8",

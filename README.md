@@ -1,12 +1,20 @@
 # 「未然」—— 校园舆情推演与决策辅助系统
 
 > 全球校园人工智能算法精英大赛（AIC）·「AI+开源」· 方向（一）开源赋能的 AI 应用创新
-> 状态：**开发中**（骨架与场景已就绪；世界状态引擎完成，待接入仿真）
+> 状态：**开发中**（骨架与场景已就绪；世界状态引擎完成，**六维闭环已接入逐轮循环**）
 
 面对校园突发事件，管理者往往在两难中做决定：公开信息会引发舆情，不公开则损耗信任。
 **「未然」把这场两难提前演练一遍**——用多智能体仿真重放事件的舆论演化，逐轮追踪
 关注、恐慌、信任、极化、风险、稳定六个维度的状态，识别风险拐点，并在你真正开口之前
 给出可比较的处置方案。
+
+**闭环是怎么闭上的。** 每一轮：读 agent 的动作 → 归类成行为信号 → 推进六维状态 →
+**把状态重新注回下一轮每个 agent 的输入**。回注的不是数值而是定性档位与方向
+（「信任偏高、下滑中」），原因是数值会被 agent 原样复述进帖文，曲线就成了回声。
+回注的还有**差异化感知**：同一时刻，家长只知道落实率，而当事人知道核实率只有
+三成且对外不披露——事实按角色逐轮注入，而不是在提示词里写死一段背景故事。
+三个阶段事件（P1–P5）同样从金标按轮号注入，且**以帖子的形式进入时间线**，
+六维的变化经由 agent 的反应发生，而不是直接给维度加激励。
 
 ---
 
@@ -50,13 +58,14 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 76 条，一次跑完（推荐）
+python -m pytest tests/             # 108 条，一次跑完（推荐）
 
-# 四套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
+# 五套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
 python tests/test_world_state.py    # 17/17
 python tests/test_llm.py            # 19/19
 python tests/test_stance.py         # 26/26
+python tests/test_perception.py     # 32/32
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
 ```
@@ -75,6 +84,27 @@ python -m weiran.validate           # 世界状态引擎离线重放校验
 > **注意工作目录**：`weiran` 包位于 `backend/` 下，因此上述命令需先 `cd backend`。
 > 若希望从任意目录调用，可执行一次 `pip install -e .`。
 
+### 5. 跑一次推演（**需要 API key**）
+
+```bash
+cd backend
+python -m weiran.simulate --agents 5 --rounds 15    # 轮 = 天，推荐口径
+python -m weiran.simulate --agents 3 --rounds 3     # 省钱冒烟（会压缩，见下）
+```
+
+闭环的三个开关**默认全开**，都可以单独关掉做消融对照：
+
+| 开关 | 关掉之后 |
+|---|---|
+| `--no-phases` | 不注入 P1–P5 阶段事件，时间线只剩 `--seed-text` |
+| `--no-feedback` | 不回注六维态势 |
+| `--no-knowledge` | 不回注该角色的知情范围 |
+
+> **轮数少于 15 会被压缩**（每轮代表多于一天），此时六维曲线**与「轮 = 天」
+> 不可比** —— 弛豫项可以复合，但激励项按步累加，同样 6 天拆成 6 步和合成 1 步
+> 是两条不同的曲线。落盘的 `meta` 里带 `compressed` 与 `comparable_to_round_day`，
+> 启动时也会打印警告，免得日后被当成「轮 = 天」的结果引用。
+
 ---
 
 ## 目录结构
@@ -89,7 +119,8 @@ backend/
     world_state.py  六维耦合弛豫引擎（不依赖 LLM，可离线跑）
     stance.py       行为归类器：自由文本 → 六维行为信号
     profiles.py     金标角色 → OASIS profile + 知情映射
-    simulate.py     推演驱动：读动作 → 归类 → 推进状态 → 落盘
+    perception.py   感知层：态势与知情范围 → 逐轮注入文本（不依赖 LLM）
+    simulate.py     推演驱动：读动作 → 归类 → 推进状态 → 回注 → 落盘
     validate.py     金标校验（离线重放 + 可机检断言）
     smoke.py        连通性冒烟（端点 / JSON / 中文 / 推理开关成本）
   repro_check.py    可复现性分级自检（三层各测一遍）
@@ -98,7 +129,8 @@ backend/
     test_world_state.py  17 条
     test_llm.py          19 条
     test_stance.py       26 条
-    —— 共 76 条，`python -m pytest tests/` 一次跑完
+    test_perception.py   32 条
+    —— 共 108 条，`python -m pytest tests/` 一次跑完
 benchmark/
   scenarios/
     employment_trust_crisis/     虚构场景：某大学《就业质量报告》信任危机
@@ -126,7 +158,10 @@ docs/
 - **不做没有收益的复杂度**。语料仅 33 个 chunk 的规模下，混合检索（RRF）不会带来
   可测量的召回提升，因此只保留词法与向量两条独立通路，不做融合。
   这一点会在技术报告中如实写明，而不是假装做了。
-
+- **代价也写进文档，不只写收益**。六维回注会经 agent 记忆逐轮累积，
+  实测每轮 prompt 比不回注高得越来越多（3 轮里从 +12% 拉到 +100%）。
+  所以闭环**不是**上下文增长的解药，它现在是加重项——这句话写在
+  [`进度.md`](进度.md) 里，也会原样写进技术报告。
 ---
 
 ## 上游与许可
