@@ -1,7 +1,7 @@
 # 「未然」—— 校园舆情推演与决策辅助系统
 
 > 全球校园人工智能算法精英大赛（AIC）·「AI+开源」· 方向（一）开源赋能的 AI 应用创新
-> 状态：**开发中**（当前处于第 1 步：骨架与首次可运行）
+> 状态：**开发中**（骨架与场景已就绪；世界状态引擎完成，待接入仿真）
 
 面对校园突发事件，管理者往往在两难中做决定：公开信息会引发舆情，不公开则损耗信任。
 **「未然」把这场两难提前演练一遍**——用多智能体仿真重放事件的舆论演化，逐轮追踪
@@ -50,8 +50,10 @@ cp .env.example .env
 
 ```bash
 cd backend
-python tests/test_store.py      # 应当 14/14 通过
+python tests/test_store.py          # 应当 14/14 通过
+python tests/test_world_state.py    # 应当 17/17 通过
 python -m weiran.scenario --reset
+python -m weiran.validate           # 世界状态引擎离线重放校验
 ```
 
 预期输出：
@@ -60,6 +62,10 @@ python -m weiran.scenario --reset
 本次写入  episodes=5 chunks=33 entities=27
 库内合计  {'episodes': 5, 'entities': 27, 'edges': 0, 'chunks': 33}
 ```
+
+> `weiran.validate` 的输出里有一个 MAE 数字。**它不是分数。**
+> 它是模型输出与**作者手写预期**之间的偏离量，只作诊断用。
+> 把它当准确率，就是给评测注水——脚本开头会再提醒一次。
 
 > **注意工作目录**：`weiran` 包位于 `backend/` 下，因此上述命令需先 `cd backend`。
 > 若希望从任意目录调用，可执行一次 `pip install -e .`。
