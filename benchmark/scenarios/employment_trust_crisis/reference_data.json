@@ -1,0 +1,157 @@
+{
+  "case_id": "employment_trust_crisis",
+  "version": "0.1.0",
+  "fictional": true,
+  "disclaimer": "本案例完全虚构。校名、人物、机构、数据、事件均为合成，不映射任何真实个人、机构或事件。本文件是评测金标，用于对照仿真输出，不作为事实主张。",
+
+  "dimensions": [
+    { "key": "attention",     "zh": "关注", "desc": "话题的传播广度与讨论密度" },
+    { "key": "panic",         "zh": "恐慌", "desc": "群体的焦虑与不确定感" },
+    { "key": "trust",         "zh": "信任", "desc": "对校方陈述与动机的信赖程度" },
+    { "key": "polarization",  "zh": "极化", "desc": "群体间立场的对立程度" },
+    { "key": "risk",          "zh": "风险", "desc": "升级为二次事件或外部介入的倾向" },
+    { "key": "stability",     "zh": "稳定", "desc": "既有秩序与共识的维持程度" }
+  ],
+
+  "phases": [
+    {
+      "id": "P1", "label": "引爆", "day": 0,
+      "trigger": "报告挂网，落实率 78.6% 曝光",
+      "expected_state": { "attention": 0.35, "panic": 0.30, "trust": 0.65,
+                          "polarization": 0.20, "risk": 0.25, "stability": 0.70 }
+    },
+    {
+      "id": "P2", "label": "口径质疑", "day": 2,
+      "trigger": "学生自制五年对比图扩散，往届生现身说法",
+      "expected_state": { "attention": 0.70, "panic": 0.45, "trust": 0.45,
+                          "polarization": 0.40, "risk": 0.45, "stability": 0.50 }
+    },
+    {
+      "id": "P3", "label": "删帖争议", "day": 5,
+      "trigger": "学工部劝删通知下发，辅导员沟通截图外流",
+      "expected_state": { "attention": 0.95, "panic": 0.70, "trust": 0.25,
+                          "polarization": 0.80, "risk": 0.80, "stability": 0.25 },
+      "is_turning_point": true
+    },
+    {
+      "id": "P4", "label": "外部介入", "day": 8,
+      "trigger": "家长群介入、自媒体转载、首份说明被批避重就轻",
+      "expected_state": { "attention": 0.90, "panic": 0.75, "trust": 0.30,
+                          "polarization": 0.75, "risk": 0.75, "stability": 0.30 }
+    },
+    {
+      "id": "P5", "label": "收束", "day": 14,
+      "trigger": "校长出席说明会，公开分专业数据、承认劝删错误、给出长效机制",
+      "expected_state": { "attention": 0.45, "panic": 0.35, "trust": 0.48,
+                          "polarization": 0.40, "risk": 0.35, "stability": 0.60 }
+    }
+  ],
+
+  "turning_point": {
+    "phase": "P3",
+    "day": 5,
+    "event": "劝删通知",
+    "why_it_matters": "议题从「数据是否真实」转移到「学校是否压制学生」。前者可用事实回应，后者无对应事实可回应——因为劝删确实发生了。此后所有澄清都会被重新解读为辩解。",
+    "detectable_signal": "立场分歧（polarization）增速首次超过事实分歧（attention）增速；辅导员群体的角色冲突指标出现异常峰值。"
+  },
+
+  "core_claim": {
+    "id": "CLAIM-IRREVERSIBILITY",
+    "statement": "在六维状态中，信任维度的衰减—恢复是不对称的：关注、恐慌、极化、风险四个维度在 P3 见顶后均大幅回落，而信任在 P5 仅回升至 0.48，显著低于 P1 基线 0.65。",
+    "falsifiable": true,
+    "measured_by": "trust(P5) - trust(P1) 显著为负，且 |trust(P5) - trust(P3)| 远小于 attention 在 P3→P5 的回落幅度",
+    "implication": "对信任类维度而言，「事后说明」的边际收益远低于「事前不犯错」。这正是「未然」的存在理由——如果信任可逆，本项目价值有限。"
+  },
+
+  "event_order": [
+    { "seq": 1,  "day": 0,  "event": "报告挂网" },
+    { "seq": 2,  "day": 0,  "event": "论坛出现首个质疑帖" },
+    { "seq": 3,  "day": 0,  "event": "班级群内辅导员提示「注意言行」" },
+    { "seq": 4,  "day": 2,  "event": "学生自制五年对比图扩散" },
+    { "seq": 5,  "day": 2,  "event": "往届生现身说法（赵一鸣）" },
+    { "seq": 6,  "day": 2,  "event": "校方内部判断议题性质变化" },
+    { "seq": 7,  "day": 4,  "event": "学工部下发劝删通知" },
+    { "seq": 8,  "day": 5,  "event": "辅导员沟通截图外流" },
+    { "seq": 9,  "day": 5,  "event": "讨论焦点转向「压制」" },
+    { "seq": 10, "day": 5,  "event": "校方紧急会议决定停止劝删" },
+    { "seq": 11, "day": 6,  "event": "自媒体加入转载" },
+    { "seq": 12, "day": 8,  "event": "家长群大规模介入" },
+    { "seq": 13, "day": 8,  "event": "校方发布首份说明" },
+    { "seq": 14, "day": 8,  "event": "首份说明被批避重就轻" },
+    { "seq": 15, "day": 13, "event": "校长决定出席说明会" },
+    { "seq": 16, "day": 14, "event": "说明会，公开分专业数据" },
+    { "seq": 17, "day": 28, "event": "追溯公布往年核实率，短暂反弹" }
+  ],
+
+  "decision_windows": [
+    { "phase": "P1", "window": "是否主动说明",       "actual_choice": "不主动", "is_turning_point": false },
+    { "phase": "P2", "window": "是否公开分专业数据", "actual_choice": "不公开", "is_turning_point": false },
+    { "phase": "P3", "window": "如何回应删帖",       "actual_choice": "先不回应，次日承认做法不当", "is_turning_point": true },
+    { "phase": "P4", "window": "第二份说明怎么写、谁出面", "actual_choice": "校长出席，一次给到位", "is_turning_point": false },
+    { "phase": "P5", "window": "长效机制",           "actual_choice": "监督小组 + 年度回访 + 追溯公布", "is_turning_point": false }
+  ],
+
+  "facts": [
+    { "id": "F1",  "text": "2025 届毕业去向落实率为 78.6%" },
+    { "id": "F2",  "text": "2024 届落实率为 92.3%，同比下降 13.7 个百分点" },
+    { "id": "F3",  "text": "2025 届灵活就业占比 21.4%" },
+    { "id": "F4",  "text": "2024 届灵活就业占比 8.9%" },
+    { "id": "F5",  "text": "灵活就业口径五年内变过三次" },
+    { "id": "F6",  "text": "报告第 12 页称「对灵活就业毕业生逐一电话核实」" },
+    { "id": "F7",  "text": "实际核实率仅 32.2%（1250 人中核实 402 人）" },
+    { "id": "F8",  "text": "分专业落实率最低 58.2%，最高 94.1%" },
+    { "id": "F9",  "text": "学工部下发劝导学生删帖的通知" },
+    { "id": "F10", "text": "辅导员被要求执行劝删，多数内心抵触" },
+    { "id": "F11", "text": "校外自媒体已以「注水就业率」为标签转载" },
+    { "id": "F12", "text": "校方内部顾虑公开数据会影响招生" },
+    { "id": "F13", "text": "往届生亦有被记为灵活就业的经历" }
+  ],
+
+  "actors": [
+    { "id": "A01", "name": "柳建国", "group": "校领导",       "role": "校长",           "stance": "最终决策者，倾向一次性说清", "knows": ["F1","F2","F8","F9","F12"], "hidden": ["F7"] },
+    { "id": "A02", "name": "沈立文", "group": "校领导",       "role": "分管副校长",     "stance": "稳妥优先，怕招生受损",       "knows": ["F1","F2","F3","F8","F9","F12"], "hidden": [] },
+    { "id": "A03", "name": "何静",   "group": "校方",         "role": "党委宣传部部长", "stance": "主张早认错，判断信任不可逆", "knows": ["F1","F2","F3","F5","F9","F11","F12"], "hidden": [] },
+    { "id": "A04", "name": "郑维",   "group": "校方",         "role": "就业指导中心主任", "stance": "防御性，倾向技术性解释",   "knows": ["F1","F2","F3","F4","F5","F6","F7","F8","F12"], "hidden": ["F7","F8"] },
+    { "id": "A05", "name": "王振",   "group": "校方",         "role": "就业中心数据统计岗", "stance": "认为口径合规，但知道核实不实", "knows": ["F1","F2","F3","F4","F5","F6","F7","F8"], "hidden": ["F7"] },
+    { "id": "A06", "name": "吴海燕", "group": "学工",         "role": "学生工作部负责人", "stance": "按流程办事，未预料舆论反噬", "knows": ["F1","F9","F11"], "hidden": [] },
+    { "id": "A07", "name": "陈默",   "group": "辅导员",       "role": "计算机学院辅导员", "stance": "执行劝删但内心抵触",       "knows": ["F1","F3","F6","F9","F10"], "hidden": [] },
+    { "id": "A08", "name": "林小雨", "group": "辅导员",       "role": "经管学院辅导员", "stance": "认同学生，夹在中间最痛苦",   "knows": ["F1","F3","F5","F6","F9","F10"], "hidden": [] },
+    { "id": "A09", "name": "张磊",   "group": "辅导员",       "role": "机械学院辅导员", "stance": "被动执行，安抚为主",         "knows": ["F1","F9"], "hidden": [] },
+    { "id": "A10", "name": "李泽宇", "group": "应届生",       "role": "机械学院 2025 届", "stance": "困惑，只想弄清口径",       "knows": ["F1","F2","F3","F6"], "hidden": [] },
+    { "id": "A11", "name": "周雨桐", "group": "应届生",       "role": "经管学院 2025 届", "stance": "实名发长帖，要求逐条对质",   "knows": ["F1","F2","F3","F4","F5","F6"], "hidden": [] },
+    { "id": "A12", "name": "吴梦琪", "group": "应届生",       "role": "自由职业（设计）", "stance": "被计入灵活就业，身份焦虑",   "knows": ["F1","F3"], "hidden": [] },
+    { "id": "A13", "name": "郑浩",   "group": "应届生",       "role": "计算机学院，已签约", "stance": "相对超然，但反感被代表", "knows": ["F1","F3"], "hidden": [] },
+    { "id": "A14", "name": "何雨晴", "group": "应届生",       "role": "汉语言文学，考研失败转求职", "stance": "焦虑，怕数据影响求职", "knows": ["F1","F2"], "hidden": [] },
+    { "id": "A15", "name": "马涛",   "group": "应届生",       "role": "环境设计，未落实", "stance": "在最低落实率专业，最受伤",   "knows": ["F1","F8"], "hidden": [] },
+    { "id": "A16", "name": "赵一鸣", "group": "往届生",       "role": "2022 届，现职小公司", "stance": "现身说法，被记为灵活就业", "knows": ["F1","F2","F6","F13"], "hidden": [] },
+    { "id": "A17", "name": "苏婉",   "group": "往届生",       "role": "2021 届，在读研究生", "stance": "庆幸自己走了升学路线",    "knows": ["F1","F2"], "hidden": [] },
+    { "id": "A18", "name": "高原",   "group": "往届生",       "role": "2023 届，已离职一次", "stance": "对就业数据整体不信任",   "knows": ["F1","F2","F5"], "hidden": [] },
+    { "id": "A19", "name": "孙陶",   "group": "在校低年级",   "role": "大二，学生会宣传部", "stance": "共情学长学姐，担心自己", "knows": ["F1","F3"], "hidden": [] },
+    { "id": "A20", "name": "林可",   "group": "在校低年级",   "role": "大一新生",       "stance": "刚入学即遇此事，动摇",       "knows": ["F1"], "hidden": [] },
+    { "id": "A21", "name": "徐鹏",   "group": "在校低年级",   "role": "大三，准备考研",  "stance": "借此事判断是否该考研",       "knows": ["F1","F2","F8"], "hidden": [] },
+    { "id": "A22", "name": "周建国", "group": "家长",         "role": "周雨桐之父",     "stance": "焦虑外溢，关心学历是否贬值", "knows": ["F1","F2"], "hidden": [] },
+    { "id": "A23", "name": "王丽华", "group": "家长",         "role": "家长群活跃者",   "stance": "追问分专业数据，要求明确答复", "knows": ["F1","F2"], "hidden": [] },
+    { "id": "A24", "name": "陈志远", "group": "家长",         "role": "高考生家长",     "stance": "重新评估是否报考",           "knows": ["F1","F2"], "hidden": [] },
+    { "id": "A25", "name": "陆敏",   "group": "媒体",         "role": "教育类周报记者", "stance": "追问核实流程，专业中立",     "knows": ["F1","F2","F3","F6"], "hidden": [] },
+    { "id": "A26", "name": "韩雨",   "group": "自媒体",       "role": "「教育观察局」主笔", "stance": "放大冲突，追问动机",   "knows": ["F1","F2","F3","F6","F9"], "hidden": [] },
+    { "id": "A27", "name": "郑凯",   "group": "外部",         "role": "企业 HR",        "stance": "数据使用方，相对中立",       "knows": ["F1","F2"], "hidden": [] }
+  ],
+
+  "assertions": [
+    { "id": "AS-1", "type": "direction",   "claim": "trust 在 P1→P3 单调下降", "check": "trust(P3) < trust(P2) < trust(P1)" },
+    { "id": "AS-2", "type": "ordering",    "claim": "attention 在 P3 见顶",   "check": "argmax_phase(attention) == P3" },
+    { "id": "AS-3", "type": "threshold",   "claim": "risk 在 P3 越过 0.7",    "check": "risk(P3) >= 0.70" },
+    { "id": "AS-4", "type": "ordering",    "claim": "polarization 在 P3 见顶", "check": "argmax_phase(polarization) == P3" },
+    { "id": "AS-5", "type": "asymmetry",   "claim": "信任恢复显著弱于关注回落（核心断言）", "check": "attention(P3)-attention(P5) > 3 * (trust(P5)-trust(P3))" },
+    { "id": "AS-6", "type": "irreversibility", "claim": "P5 信任未回到 P1 基线", "check": "trust(P5) < trust(P1) - 0.10" },
+    { "id": "AS-7", "type": "event_order", "claim": "劝删事件被检出且排在口径质疑之后、父母介入之前", "check": "seq(劝删) in (seq(口径质疑), seq(家长介入))" },
+    { "id": "AS-8", "type": "prediction",  "claim": "风险预警在 P3 之前触发（「未然」的存在理由）", "check": "warning_issued_at <= P2" },
+    { "id": "AS-9", "type": "role",        "claim": "辅导员群体的角色冲突指标为全群体最高", "check": "argmax_group(role_conflict) == 辅导员" },
+    { "id": "AS-10","type": "counterfactual","claim": "若在 P2 主动公开分专业数据，P5 信任终值高于实际路径", "check": "trust_branch(P5) > trust_actual(P5)", "note": "此项需要运行干预分支，是「干预建议」功能的评测依据" }
+  ],
+
+  "metric_notes": {
+    "role_conflict": "角色冲突指标 = 该群体内部「公开立场」与「私下立场」的情感极性差。种子材料中辅导员群体的私聊与公开表态差异最大，是本案例中唯一可直接从材料验证的群体级信号。",
+    "scoring_determinism": "评测是确定性的（同一 actions.jsonl → 同一分数），仿真是随机的（LLM 采样不可完全复现）。因此报告应给均值与区间，不应声称「固定种子完全复现」。"
+  }
+}

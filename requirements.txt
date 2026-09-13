@@ -1,0 +1,19 @@
+# 「未然」运行依赖
+#
+# 分两组：核心运行时 / 仿真内核。
+#
+# 仿真内核的版本是**刻意锁死的**：上游 MiroFish 的驱动脚本对 oasis 的内部
+# 做了 monkey-patch（patch_agent_memory_limit / patch_oasis_environment），
+# 这些是私有实现，版本一变就碎。升级前必须重新验证仿真能跑通。
+# 详见 docs/开源及第三方资源使用清单.md。
+
+# ---- 核心运行时 ----
+# 刻意不引入 openai SDK / python-dotenv：需求各只有十几行，
+# 少一个依赖就少一个「评委装不上」的失败点。见 weiran/llm.py、weiran/config.py 的注释。
+requests>=2.31
+numpy>=1.26
+Flask>=3.0
+
+# ---- 仿真内核（版本锁死，勿升级）----
+camel-oasis==0.2.5
+camel-ai==0.2.78
