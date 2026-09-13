@@ -1,0 +1,356 @@
+{
+  "note": "由 weiran.profiles 生成。供感知层逐轮注入，勿手工编辑。",
+  "actors": {
+    "A01": {
+      "user_id": 0,
+      "user_name": "weiran_a01",
+      "name": "柳建国",
+      "group": "校领导",
+      "knows": [
+        "F1",
+        "F2",
+        "F8",
+        "F9",
+        "F12"
+      ],
+      "hidden": [
+        "F7"
+      ]
+    },
+    "A02": {
+      "user_id": 1,
+      "user_name": "weiran_a02",
+      "name": "沈立文",
+      "group": "校领导",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F8",
+        "F9",
+        "F12"
+      ],
+      "hidden": []
+    },
+    "A03": {
+      "user_id": 2,
+      "user_name": "weiran_a03",
+      "name": "何静",
+      "group": "校方",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F5",
+        "F9",
+        "F11",
+        "F12"
+      ],
+      "hidden": []
+    },
+    "A04": {
+      "user_id": 3,
+      "user_name": "weiran_a04",
+      "name": "郑维",
+      "group": "校方",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F12"
+      ],
+      "hidden": [
+        "F7",
+        "F8"
+      ]
+    },
+    "A05": {
+      "user_id": 4,
+      "user_name": "weiran_a05",
+      "name": "王振",
+      "group": "校方",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8"
+      ],
+      "hidden": [
+        "F7"
+      ]
+    },
+    "A06": {
+      "user_id": 5,
+      "user_name": "weiran_a06",
+      "name": "吴海燕",
+      "group": "学工",
+      "knows": [
+        "F1",
+        "F9",
+        "F11"
+      ],
+      "hidden": []
+    },
+    "A07": {
+      "user_id": 6,
+      "user_name": "weiran_a07",
+      "name": "陈默",
+      "group": "辅导员",
+      "knows": [
+        "F1",
+        "F3",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "hidden": []
+    },
+    "A08": {
+      "user_id": 7,
+      "user_name": "weiran_a08",
+      "name": "林小雨",
+      "group": "辅导员",
+      "knows": [
+        "F1",
+        "F3",
+        "F5",
+        "F6",
+        "F9",
+        "F10"
+      ],
+      "hidden": []
+    },
+    "A09": {
+      "user_id": 8,
+      "user_name": "weiran_a09",
+      "name": "张磊",
+      "group": "辅导员",
+      "knows": [
+        "F1",
+        "F9"
+      ],
+      "hidden": []
+    },
+    "A10": {
+      "user_id": 9,
+      "user_name": "weiran_a10",
+      "name": "李泽宇",
+      "group": "应届生",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F6"
+      ],
+      "hidden": []
+    },
+    "A11": {
+      "user_id": 10,
+      "user_name": "weiran_a11",
+      "name": "周雨桐",
+      "group": "应届生",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "hidden": []
+    },
+    "A12": {
+      "user_id": 11,
+      "user_name": "weiran_a12",
+      "name": "吴梦琪",
+      "group": "应届生",
+      "knows": [
+        "F1",
+        "F3"
+      ],
+      "hidden": []
+    },
+    "A13": {
+      "user_id": 12,
+      "user_name": "weiran_a13",
+      "name": "郑浩",
+      "group": "应届生",
+      "knows": [
+        "F1",
+        "F3"
+      ],
+      "hidden": []
+    },
+    "A14": {
+      "user_id": 13,
+      "user_name": "weiran_a14",
+      "name": "何雨晴",
+      "group": "应届生",
+      "knows": [
+        "F1",
+        "F2"
+      ],
+      "hidden": []
+    },
+    "A15": {
+      "user_id": 14,
+      "user_name": "weiran_a15",
+      "name": "马涛",
+      "group": "应届生",
+      "knows": [
+        "F1",
+        "F8"
+      ],
+      "hidden": []
+    },
+    "A16": {
+      "user_id": 15,
+      "user_name": "weiran_a16",
+      "name": "赵一鸣",
+      "group": "往届生",
+      "knows": [
+        "F1",
+        "F2",
+        "F6",
+        "F13"
+      ],
+      "hidden": []
+    },
+    "A17": {
+      "user_id": 16,
+      "user_name": "weiran_a17",
+      "name": "苏婉",
+      "group": "往届生",
+      "knows": [
+        "F1",
+        "F2"
+      ],
+      "hidden": []
+    },
+    "A18": {
+      "user_id": 17,
+      "user_name": "weiran_a18",
+      "name": "高原",
+      "group": "往届生",
+      "knows": [
+        "F1",
+        "F2",
+        "F5"
+      ],
+      "hidden": []
+    },
+    "A19": {
+      "user_id": 18,
+      "user_name": "weiran_a19",
+      "name": "孙陶",
+      "group": "在校低年级",
+      "knows": [
+        "F1",
+        "F3"
+      ],
+      "hidden": []
+    },
+    "A20": {
+      "user_id": 19,
+      "user_name": "weiran_a20",
+      "name": "林可",
+      "group": "在校低年级",
+      "knows": [
+        "F1"
+      ],
+      "hidden": []
+    },
+    "A21": {
+      "user_id": 20,
+      "user_name": "weiran_a21",
+      "name": "徐鹏",
+      "group": "在校低年级",
+      "knows": [
+        "F1",
+        "F2",
+        "F8"
+      ],
+      "hidden": []
+    },
+    "A22": {
+      "user_id": 21,
+      "user_name": "weiran_a22",
+      "name": "周建国",
+      "group": "家长",
+      "knows": [
+        "F1",
+        "F2"
+      ],
+      "hidden": []
+    },
+    "A23": {
+      "user_id": 22,
+      "user_name": "weiran_a23",
+      "name": "王丽华",
+      "group": "家长",
+      "knows": [
+        "F1",
+        "F2"
+      ],
+      "hidden": []
+    },
+    "A24": {
+      "user_id": 23,
+      "user_name": "weiran_a24",
+      "name": "陈志远",
+      "group": "家长",
+      "knows": [
+        "F1",
+        "F2"
+      ],
+      "hidden": []
+    },
+    "A25": {
+      "user_id": 24,
+      "user_name": "weiran_a25",
+      "name": "陆敏",
+      "group": "媒体",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F6"
+      ],
+      "hidden": []
+    },
+    "A26": {
+      "user_id": 25,
+      "user_name": "weiran_a26",
+      "name": "韩雨",
+      "group": "自媒体",
+      "knows": [
+        "F1",
+        "F2",
+        "F3",
+        "F6",
+        "F9"
+      ],
+      "hidden": []
+    },
+    "A27": {
+      "user_id": 26,
+      "user_name": "weiran_a27",
+      "name": "郑凯",
+      "group": "外部",
+      "knows": [
+        "F1",
+        "F2"
+      ],
+      "hidden": []
+    }
+  }
+}

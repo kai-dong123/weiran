@@ -17,3 +17,10 @@ Flask>=3.0
 # ---- 仿真内核（版本锁死，勿升级）----
 camel-oasis==0.2.5
 camel-ai==0.2.78
+
+# camel-ai 自己声明的是 `mcp>=1.3.0`，**上界开放**。pip 会解析到 mcp 2.x，
+# 而 mcp 2.x 把 `FastMCP` 从 `mcp.server` 移走了，于是 camel-ai 一导入就炸：
+#     ImportError: cannot import name 'FastMCP' from 'mcp.server'
+# 这个错误只在「clone 下来装一遍」时出现，开发机上装了旧版就看不到。
+# 实测 1.30.0 可用。**这一行不是保险，是必需品。**
+mcp<2

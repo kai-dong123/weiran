@@ -23,6 +23,17 @@ data/runs/
 data/*.db
 *.log
 
+# 上面那条 `data/*.db` 只匹配直接子项，`data/simulation/` 下还有 OASIS 自己
+# 建的库（twitter_simulation.db / tw_diag.db），必须单独覆盖，否则一提交就是
+# 好几十万行的二进制噪音。
+data/**/*.db
+
+# ---- 缓存（可重建，不入库）----
+# 这两个是 LLM 调用的落盘缓存，删除后重跑会再花钱，但内容完全可重建。
+# 与「直接输入」的区别：删掉 twitter_profiles.csv 或 actor_knowledge.json，
+# 第二步仿真就跑不起来；删掉缓存只是变慢。
+data/simulation/*_cache.json
+
 # ---- 但固定样本必须入库（可复现性的前提）----
 !benchmark/fixtures/
 !benchmark/fixtures/**
