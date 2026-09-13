@@ -4,6 +4,13 @@
   "fictional": true,
   "disclaimer": "本案例完全虚构。校名、人物、机构、数据、事件均为合成，不映射任何真实个人、机构或事件。本文件是评测金标，用于对照仿真输出，不作为事实主张。",
 
+  "gold_status": {
+    "what_is_solid": "event_order（事件顺序）、decision_windows（决策窗口）、actors（角色与其知情范围）、facts（事实清单）—— 这些是场景叙事的事实，撰写后不随模型改动。",
+    "what_is_NOT_solid": "reference_shape（各阶段六维状态值）是**作者手写的强度预期**，不是观测值，也不是评分基准。任何以它为分母算出的『准确率』都是自说自话。",
+    "why_it_matters": "把人工写下的数字当作评分基准，正是本工作明确拒绝的做法。金标必须区分『叙事事实』与『作者预期』两类，混在一起就是给评测注水。",
+    "scored_assertions": "只有 assertions 里的条目可被机检判分，且其中涉及 reference_shape 的阈值型断言（如 risk>=0.70）需在真实仿真产出后重新标定。"
+  },
+
   "dimensions": [
     { "key": "attention",     "zh": "关注", "desc": "话题的传播广度与讨论密度" },
     { "key": "panic",         "zh": "恐慌", "desc": "群体的焦虑与不确定感" },
@@ -17,32 +24,32 @@
     {
       "id": "P1", "label": "引爆", "day": 0,
       "trigger": "报告挂网，落实率 78.6% 曝光",
-      "expected_state": { "attention": 0.35, "panic": 0.30, "trust": 0.65,
+      "reference_shape": { "attention": 0.35, "panic": 0.30, "trust": 0.65,
                           "polarization": 0.20, "risk": 0.25, "stability": 0.70 }
     },
     {
       "id": "P2", "label": "口径质疑", "day": 2,
       "trigger": "学生自制五年对比图扩散，往届生现身说法",
-      "expected_state": { "attention": 0.70, "panic": 0.45, "trust": 0.45,
+      "reference_shape": { "attention": 0.70, "panic": 0.45, "trust": 0.45,
                           "polarization": 0.40, "risk": 0.45, "stability": 0.50 }
     },
     {
       "id": "P3", "label": "删帖争议", "day": 5,
       "trigger": "学工部劝删通知下发，辅导员沟通截图外流",
-      "expected_state": { "attention": 0.95, "panic": 0.70, "trust": 0.25,
+      "reference_shape": { "attention": 0.95, "panic": 0.70, "trust": 0.25,
                           "polarization": 0.80, "risk": 0.80, "stability": 0.25 },
       "is_turning_point": true
     },
     {
       "id": "P4", "label": "外部介入", "day": 8,
       "trigger": "家长群介入、自媒体转载、首份说明被批避重就轻",
-      "expected_state": { "attention": 0.90, "panic": 0.75, "trust": 0.30,
+      "reference_shape": { "attention": 0.90, "panic": 0.75, "trust": 0.30,
                           "polarization": 0.75, "risk": 0.75, "stability": 0.30 }
     },
     {
       "id": "P5", "label": "收束", "day": 14,
       "trigger": "校长出席说明会，公开分专业数据、承认劝删错误、给出长效机制",
-      "expected_state": { "attention": 0.45, "panic": 0.35, "trust": 0.48,
+      "reference_shape": { "attention": 0.45, "panic": 0.35, "trust": 0.48,
                           "polarization": 0.40, "risk": 0.35, "stability": 0.60 }
     }
   ],
