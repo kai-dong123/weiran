@@ -7,6 +7,7 @@
     「未然」的可复现性是**分层**的，不是一句「我们可复现」能概括的。
 
     第 3 层  端到端（同一条命令 → 同一条曲线）   ❌ 不可复现，且**原理上做不到**
+    第 2.5 层 简报（同一份产出 → 同一份文字）    ✅ 确定，`test_brief.py` 锁住
     第 2 层  推演（同样的行为序列 → 同样的曲线） ✅ 确定，`test_world_state.py` 锁住
     第 1 层  归类（同样的文本 → 同样的标签）     ✅ 确定，缓存 + `test_stance.py` 锁住
 
@@ -18,10 +19,16 @@
 
 **把做不到的那一层如实报出来，比含糊掉它重要得多。**
 
+第 2.5 层是补上去的，理由值得写下来：上面那句「不可复现」说的是**曲线**，
+不是**产出物**。一份给人看的简报里没有 LLM、没有随机数、没有时间戳，
+所以它**必须**逐字可复现 —— 否则「不可复现」就从一条有边界的性质，
+变成了不去做确定性的借口。这一层还顺带比对落盘样例是否与当前代码一致，
+防的是「模板改了、样例没重跑」。
+
 用法：
     cd backend
-    python repro_check.py            # 三层都跑
-    python repro_check.py --skip-e2e # 只跑确定的两层（快、不花钱）
+    python repro_check.py            # 四层都跑
+    python repro_check.py --skip-e2e # 只跑确定的三层（快、不花钱）
 """
 
 from __future__ import annotations
@@ -97,7 +104,60 @@ def check_classifier() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# 第 2 层：引擎 —— 同样的行为序列，同样的曲线
+# 第 2.5 层：简报 —— 同样的产出，同样的文字
+# ---------------------------------------------------------------------------
+
+def check_brief() -> bool:
+    """把「确定性」从引擎推进到**产出物**。
+
+    前面两层说的是「同样的输入给同样的输出」，这一层说的是
+    「同一份产出给同一份简报」—— 一个给人看的东西也应当是算出来的，
+    而不是每次带点不一样。
+
+    这一层的确定性是**真的**（简报里没有 LLM、没有随机数、没有时间戳），
+    所以它进退出码，与第 3 层不同规格。
+    """
+    print("\n【第 2.5 层】简报：同一份产出 → 同一份文字")
+    import json
+
+    from weiran import brief as B
+    from weiran.config import REPO_ROOT
+
+    run_path = REPO_ROOT / "data" / "simulation" / "twitter_rounds.json"
+    if not run_path.is_file():
+        print(f"  ⏭  缺少 {run_path.name}，本层跳过 —— "
+              f"**这不是「通过」**，是没测到")
+        return True
+
+    rd = B.load_rounds(run_path)
+    gold = B.load_gold(REPO_ROOT / B.DEFAULT_SCENARIO)
+    a = B.build_brief(rd, gold, command="repro_check")
+    b = B.build_brief(rd, gold, command="repro_check")
+    md_a, md_b = B.render_markdown(a), B.render_markdown(b)
+    j_a = json.dumps(a, ensure_ascii=False, sort_keys=True)
+    j_b = json.dumps(b, ensure_ascii=False, sort_keys=True)
+
+    ok = md_a == md_b and j_a == j_b
+    print(f"  {'✅' if md_a == md_b else '❌'} markdown 逐字一致（{len(md_a)} 字符）")
+    print(f"  {'✅' if j_a == j_b else '❌'} JSON 逐字一致")
+
+    # 落盘的那份样例必须与当前代码算出来的一致 —— 否则模板改了而样例没重跑，
+    # 仓库里给人看的第一份东西就是过期的。
+    sample = REPO_ROOT / "data" / "simulation" / "brief.md"
+    if sample.is_file():
+        fresh = md_a == sample.read_text(encoding="utf-8")
+        ok = ok and fresh
+        print(f"  {'✅' if fresh else '❌'} 落盘样例 data/simulation/brief.md 与当前代码一致"
+              + ("" if fresh else "（模板改了没重跑：python -m weiran.brief）"))
+    else:
+        print("  ⏭  尚无落盘样例，跳过一致性比对")
+
+    print(f"  → 简报确定且样例最新：{'是 ✅' if ok else '否 ❌'}")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# 第 3 层：端到端 —— 同一条命令，同一条曲线
 # ---------------------------------------------------------------------------
 
 def check_engine() -> bool:
@@ -175,7 +235,8 @@ def main() -> int:
                     help="跳过第 3 层（不调 LLM，秒回）")
     args = ap.parse_args()
 
-    results = {"归类": check_classifier(), "引擎": check_engine()}
+    results = {"归类": check_classifier(), "引擎": check_engine(),
+               "简报": check_brief()}
     if not args.skip_e2e:
         results["端到端"] = check_end_to_end(args.rounds, args.agents)
 
@@ -183,9 +244,9 @@ def main() -> int:
     for k, v in results.items():
         print(f"  {k:<8} {'✅ 确定' if v else '❌ 不确定'}")
     print("=" * 62)
-    # **只有前两层算「必须通过」** —— 第 3 层不可复现是已知且已解释的性质，
-    # 不是失败。把它算进退出码，会让这个脚本天天红，然后就没人看了。
-    return 0 if results["归类"] and results["引擎"] else 1
+    # **第 3 层不进退出码** —— 它不可复现是已知且已解释的性质，不是失败。
+    # 把它算进去会让这个脚本天天红，然后就没人看了。前两层与简报层进。
+    return 0 if all(results[k] for k in ("归类", "引擎", "简报")) else 1
 
 
 if __name__ == "__main__":

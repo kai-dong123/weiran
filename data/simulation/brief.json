@@ -1,0 +1,533 @@
+{
+  "provenance": {
+    "rounds_file": "D:\\open_source\\weiran\\data\\simulation\\twitter_rounds.json",
+    "rounds_sha256": "3f76a7d792ad7e3d",
+    "scenario_dir": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis",
+    "scenario_file": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis\\reference_data.json",
+    "scenario_sha256": "3fe1fbf8c74f726c",
+    "command": "python -m weiran.brief"
+  },
+  "meta": {
+    "rounds": 3,
+    "agents": 3,
+    "platform": "twitter",
+    "seed_text": "",
+    "days_per_round": 7.0,
+    "compressed": true,
+    "comparable_to_round_day": false,
+    "phases_on": true,
+    "knowledge_on": true,
+    "feedback_on": true,
+    "world_state": true,
+    "total_seconds": 17.84,
+    "total_actions": 14
+  },
+  "days_per_round": 7.0,
+  "coverage": {
+    "n_uncovered": 0,
+    "n_shared": 4,
+    "by_phase": {
+      "P1": [
+        0
+      ],
+      "P2": [
+        0
+      ],
+      "P3": [
+        1
+      ],
+      "P4": [
+        1
+      ],
+      "P5": [
+        2
+      ]
+    }
+  },
+  "windows": [
+    {
+      "phase": "P1",
+      "label": "引爆",
+      "trigger": "报告挂网，落实率 78.6% 曝光",
+      "question": "是否主动说明",
+      "actual_choice": "不主动",
+      "is_turning_point": false,
+      "gold_day": 0,
+      "round_index": 0,
+      "fork_day": 0.0,
+      "day_skew": 0.0,
+      "coverage": "shared",
+      "shared_with": [
+        "P2"
+      ],
+      "actual_from_fork": 0.6581,
+      "branch_a": 0.7039,
+      "branch_b": null,
+      "delta_a": 0.0458,
+      "delta_b": null,
+      "note": "分叉点为基线（该阶段是首轮，没有前一轮）；本窗口不涉及劝删，不设机制版"
+    },
+    {
+      "phase": "P2",
+      "label": "口径质疑",
+      "trigger": "学生自制五年对比图扩散，往届生现身说法",
+      "question": "是否公开分专业数据",
+      "actual_choice": "不公开",
+      "is_turning_point": false,
+      "gold_day": 2,
+      "round_index": 0,
+      "fork_day": 0.0,
+      "day_skew": -2.0,
+      "coverage": "shared",
+      "shared_with": [
+        "P1"
+      ],
+      "actual_from_fork": 0.6581,
+      "branch_a": 0.7039,
+      "branch_b": null,
+      "delta_a": 0.0458,
+      "delta_b": null,
+      "note": "分叉点为基线（该阶段是首轮，没有前一轮）；本窗口不涉及劝删，不设机制版"
+    },
+    {
+      "phase": "P3",
+      "label": "删帖争议",
+      "trigger": "学工部劝删通知下发，辅导员沟通截图外流",
+      "question": "如何回应删帖",
+      "actual_choice": "先不回应，次日承认做法不当",
+      "is_turning_point": true,
+      "gold_day": 5,
+      "round_index": 1,
+      "fork_day": 7.0,
+      "day_skew": 2.0,
+      "coverage": "shared",
+      "shared_with": [
+        "P4"
+      ],
+      "actual_from_fork": 0.6582,
+      "branch_a": 0.74,
+      "branch_b": 0.7427,
+      "delta_a": 0.0818,
+      "delta_b": 0.0845,
+      "note": ""
+    },
+    {
+      "phase": "P4",
+      "label": "外部介入",
+      "trigger": "家长群介入、自媒体转载、首份说明被批避重就轻",
+      "question": "第二份说明怎么写、谁出面",
+      "actual_choice": "校长出席，一次给到位",
+      "is_turning_point": false,
+      "gold_day": 8,
+      "round_index": 1,
+      "fork_day": 7.0,
+      "day_skew": -1.0,
+      "coverage": "shared",
+      "shared_with": [
+        "P3"
+      ],
+      "actual_from_fork": 0.6582,
+      "branch_a": 0.74,
+      "branch_b": null,
+      "delta_a": 0.0818,
+      "delta_b": null,
+      "note": "本窗口不涉及劝删，不设机制版"
+    },
+    {
+      "phase": "P5",
+      "label": "收束",
+      "trigger": "校长出席说明会，公开分专业数据、承认劝删错误、给出长效机制",
+      "question": "长效机制",
+      "actual_choice": "监督小组 + 年度回访 + 追溯公布",
+      "is_turning_point": false,
+      "gold_day": 14,
+      "round_index": 2,
+      "fork_day": 14.0,
+      "day_skew": 0.0,
+      "coverage": "exclusive",
+      "shared_with": [],
+      "actual_from_fork": 0.6581,
+      "branch_a": 0.6897,
+      "branch_b": null,
+      "delta_a": 0.0316,
+      "delta_b": null,
+      "note": "本窗口不涉及劝删，不设机制版"
+    }
+  ],
+  "rounds": [
+    {
+      "index": 0,
+      "phase_id": "P1,P2",
+      "behaviors": [
+        "disclosure",
+        "amplification",
+        "discussion",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "disclosure": 1,
+        "amplification": 1,
+        "discussion": 2
+      },
+      "state": {
+        "attention": 0.0543,
+        "panic": 0.1016,
+        "trust": 0.6999,
+        "polarization": 0.1172,
+        "risk": 0.1121,
+        "stability": 0.8527
+      },
+      "deltas": {
+        "attention": 0.0043,
+        "panic": 0.0016,
+        "trust": -0.0001,
+        "polarization": 0.0172,
+        "risk": 0.0121,
+        "stability": 0.0027
+      },
+      "excitation": {
+        "attention": 0.1098,
+        "panic": 0.021,
+        "trust": 0.0021,
+        "polarization": 0.0189,
+        "risk": 0.0189,
+        "stability": 0.0078
+      },
+      "relaxation": {
+        "attention": -0.1054,
+        "panic": -0.0191,
+        "trust": -0.0006,
+        "polarization": -0.0028,
+        "risk": -0.0073,
+        "stability": -0.0017
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": -0.0003,
+        "trust": -0.0016,
+        "polarization": 0.0012,
+        "risk": 0.0005,
+        "stability": -0.0034
+      },
+      "events": [],
+      "injected_count": 3,
+      "calls": 1,
+      "llm_seconds": 2.61,
+      "prompt_tokens": 1363,
+      "completion_tokens": 330,
+      "errors": 0,
+      "failures": null,
+      "slowest": null
+    },
+    {
+      "index": 1,
+      "phase_id": "P3,P4",
+      "behaviors": [
+        "suppression",
+        "amplification",
+        "discussion",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "suppression": 1,
+        "amplification": 1,
+        "discussion": 2
+      },
+      "state": {
+        "attention": 0.0549,
+        "panic": 0.1154,
+        "trust": 0.6425,
+        "polarization": 0.1957,
+        "risk": 0.1685,
+        "stability": 0.8114
+      },
+      "deltas": {
+        "attention": 0.0006,
+        "panic": 0.0139,
+        "trust": -0.0574,
+        "polarization": 0.0785,
+        "risk": 0.0563,
+        "stability": -0.0413
+      },
+      "excitation": {
+        "attention": 0.1213,
+        "panic": 0.063,
+        "trust": -0.0685,
+        "polarization": 0.0882,
+        "risk": 0.0851,
+        "stability": -0.0284
+      },
+      "relaxation": {
+        "attention": -0.1207,
+        "panic": -0.0589,
+        "trust": 0.0201,
+        "polarization": -0.0157,
+        "risk": -0.0374,
+        "stability": 0.0055
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0097,
+        "trust": -0.009,
+        "polarization": 0.006,
+        "risk": 0.0086,
+        "stability": -0.0185
+      },
+      "events": [
+        {
+          "kind": "suppression_detected",
+          "dimension": "trust",
+          "magnitude": 1.0,
+          "message": "检出压制类行为 1 条 —— 议题可能从「事实争议」转为「动机争议」"
+        }
+      ],
+      "injected_count": 3,
+      "calls": 1,
+      "llm_seconds": 1.75,
+      "prompt_tokens": 3540,
+      "completion_tokens": 152,
+      "errors": 0,
+      "failures": null,
+      "slowest": null
+    },
+    {
+      "index": 2,
+      "phase_id": "P5",
+      "behaviors": [
+        "disclosure",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "disclosure": 1,
+        "discussion": 1
+      },
+      "state": {
+        "attention": 0.0519,
+        "panic": 0.1072,
+        "trust": 0.6581,
+        "polarization": 0.1787,
+        "risk": 0.1352,
+        "stability": 0.811
+      },
+      "deltas": {
+        "attention": -0.0031,
+        "panic": -0.0082,
+        "trust": 0.0156,
+        "polarization": -0.017,
+        "risk": -0.0333,
+        "stability": -0.0004
+      },
+      "excitation": {
+        "attention": 0.0429,
+        "panic": -0.0111,
+        "trust": 0.009,
+        "polarization": -0.0067,
+        "risk": -0.02,
+        "stability": 0.0083
+      },
+      "relaxation": {
+        "attention": -0.0459,
+        "panic": -0.0039,
+        "trust": 0.0142,
+        "polarization": -0.0133,
+        "risk": -0.0186,
+        "stability": 0.0065
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0069,
+        "trust": -0.0076,
+        "polarization": 0.003,
+        "risk": 0.0054,
+        "stability": -0.0152
+      },
+      "events": [],
+      "injected_count": 3,
+      "calls": 2,
+      "llm_seconds": 3.06,
+      "prompt_tokens": 9621,
+      "completion_tokens": 321,
+      "errors": 0,
+      "failures": null,
+      "slowest": null
+    }
+  ],
+  "turning_point": {
+    "gold": {
+      "phase": "P3",
+      "day": 5,
+      "event": "劝删通知",
+      "why_it_matters": "议题从「数据是否真实」转移到「学校是否压制学生」。前者可用事实回应，后者无对应事实可回应——因为劝删确实发生了。此后所有澄清都会被重新解读为辩解。",
+      "detectable_signal": "立场分歧（polarization）增速首次超过事实分歧（attention）增速；辅导员群体的角色冲突指标出现异常峰值。",
+      "provenance": "场景叙事，作者编写，**非模型产出**"
+    },
+    "detected_events": [
+      {
+        "round": 1,
+        "phase": "P3,P4",
+        "kind": "suppression_detected",
+        "dimension": "trust",
+        "magnitude": 1.0,
+        "message": "检出压制类行为 1 条 —— 议题可能从「事实争议」转为「动机争议」"
+      }
+    ],
+    "signal_series": [
+      {
+        "round": 0,
+        "phase": "P1,P2",
+        "d_attention": 0.0043,
+        "d_polarization": 0.0172,
+        "polarization_exceeds_attention": true
+      },
+      {
+        "round": 1,
+        "phase": "P3,P4",
+        "d_attention": 0.0006,
+        "d_polarization": 0.0785,
+        "polarization_exceeds_attention": true
+      },
+      {
+        "round": 2,
+        "phase": "P5",
+        "d_attention": -0.0031,
+        "d_polarization": -0.017,
+        "polarization_exceeds_attention": false
+      }
+    ],
+    "first_round_polarization_exceeds_attention": 0,
+    "signal_agrees_with_gold": false,
+    "unimplemented_signals": [
+      {
+        "name": "辅导员群体的角色冲突指标",
+        "reason": "需要逐角色「公开立场 vs 私下立场」的情感极性差；当前产出里 `injected` 只存块摘要（sha1 前 12 位），不含立场文本。宁可空着，也不报一个编出来的数。"
+      }
+    ]
+  },
+  "clamp": [
+    {
+      "dimension": "attention",
+      "zh": "关注",
+      "raw": 0.25,
+      "normalized": 1.1364,
+      "clamped": true
+    },
+    {
+      "dimension": "panic",
+      "zh": "恐慌",
+      "raw": -0.15,
+      "normalized": -0.6818,
+      "clamped": false
+    },
+    {
+      "dimension": "trust",
+      "zh": "信任",
+      "raw": 0.225,
+      "normalized": 1.0227,
+      "clamped": true
+    },
+    {
+      "dimension": "polarization",
+      "zh": "极化",
+      "raw": -0.1,
+      "normalized": -0.4545,
+      "clamped": false
+    },
+    {
+      "dimension": "risk",
+      "zh": "风险",
+      "raw": -0.15,
+      "normalized": -0.6818,
+      "clamped": false
+    },
+    {
+      "dimension": "stability",
+      "zh": "稳定",
+      "raw": 0.15,
+      "normalized": 0.6818,
+      "clamped": false
+    }
+  ],
+  "intervention_scale": 2.5,
+  "ref_weight": 0.22,
+  "assumptions": {
+    "P1": {
+      "action": "disclosure",
+      "rationale": "「主动说明」在本模型的激励表里对应一次强公开"
+    },
+    "P2": {
+      "action": "disclosure",
+      "rationale": "「公开分专业数据」对应一次强公开"
+    },
+    "P3": {
+      "action": "disclosure",
+      "rationale": "「承认劝删做法不当」对应一次强公开（回应而非压制）"
+    },
+    "P4": {
+      "action": "disclosure",
+      "rationale": "「校长出席、一次给到位」对应一次强公开"
+    },
+    "P5": {
+      "action": "disclosure",
+      "rationale": "「公布长效机制」对应一次强公开"
+    }
+  },
+  "core_claim": {
+    "id": "CLAIM-IRREVERSIBILITY",
+    "statement": "在六维状态中，信任维度的衰减—恢复是不对称的：关注、恐慌、极化、风险四个维度在 P3 见顶后均大幅回落，而信任在 P5 仅回升至 0.48，显著低于 P1 基线 0.65。",
+    "falsifiable": true,
+    "measured_by": "trust(P5) - trust(P1) 显著为负，且 |trust(P5) - trust(P3)| 远小于 attention 在 P3→P5 的回落幅度",
+    "implication": "对信任类维度而言，「事后说明」的边际收益远低于「事前不犯错」。这正是「未然」的存在理由——如果信任可逆，本项目价值有限。"
+  },
+  "metric_notes": {
+    "role_conflict": "角色冲突指标 = 该群体内部「公开立场」与「私下立场」的情感极性差。种子材料中辅导员群体的私聊与公开表态差异最大，是本案例中唯一可直接从材料验证的群体级信号。",
+    "scoring_determinism": "评测是确定性的（同一 actions.jsonl → 同一分数），仿真是随机的（LLM 采样不可完全复现）。因此报告应给均值与区间，不应声称「固定种子完全复现」。"
+  },
+  "dimension_desc": {
+    "attention": "话题的传播广度与讨论密度",
+    "panic": "群体的焦虑与不确定感",
+    "trust": "对校方陈述与动机的信赖程度",
+    "polarization": "群体间立场的对立程度",
+    "risk": "升级为二次事件或外部介入的倾向",
+    "stability": "既有秩序与共识的维持程度"
+  },
+  "cost": {
+    "summary": "4 次调用 / 7.4s（均值 1.9s，最慢 **未记录**，失败 **未记录**） · token 入 14524 / 出 803",
+    "failures_recorded": false,
+    "note": "调用失败次数与最慢单次**未记录在本产出文件里**（这两个字段是本轮才加进落盘的，旧产出没有）。生成这份简报时它们按「未记录」显示，不是 0。",
+    "prompt_tokens": 14524,
+    "completion_tokens": 803
+  },
+  "replay_max_deviation": 4.625319804462541e-05,
+  "degradations": [
+    {
+      "kind": "compressed",
+      "text": "压缩模式：每轮代表 7.00 天，曲线与「轮 = 天」不可比"
+    },
+    {
+      "kind": "not_comparable",
+      "text": "`comparable_to_round_day` 为假，不可与 --rounds 15 的结果并列"
+    },
+    {
+      "kind": "small_scale",
+      "text": "仅 3 个 agent —— 每轮只有 3~4 条行为，声势项 `tanh(n/8)` 只到半饱和，所有数值都是小规模敏感性测试"
+    },
+    {
+      "kind": "shared_round",
+      "text": "4 个窗口与其他窗口共处同一轮 —— 干预相同、分叉点相同，因此数值必然重复，**不可单独归因**"
+    }
+  ],
+  "disclaimers": {
+    "nonreproducible": "**端到端不可复现。** agent 每次说的话都不一样，缓存只能保证「同一句话给同一个标签」，保证不了「同一场推演说同一句话」。所以任何一次运行的曲线都只是**一个样本**，正式口径应当是「多 seed 跑 N 次、报均值与方差」，而不是「跑一次就准」。",
+    "compressed": "**本轮运行是压缩模式。** 每轮代表多于一天时，六维曲线与「轮 = 天」**不可比** —— 弛豫项 `exp(-k·dt)` 可以复合，但激励项按步累加：同样 7 天拆成 7 步会激励 7 次、合成 1 步只激励 1 次。两条曲线不是同一条曲线的粗细版本，是两条不同的曲线。",
+    "model_internal": "**反事实不是预测。** 分支假设「后续行为不变」，而现实中一旦真的公开，agent 的反应本身就会变 —— 那正是模型答不了的部分。A／B 两版不是区间，是两个模型假设下的两个点，**不构成上下界保证**。表里的差异只表示在该模型内部两条路径的高低，不表示现实中的处置效果；而且本模型对有利方向的激励打了折扣（`ASYMMETRY`，trust 0.45），所以正值本身也是被折扣过的。",
+    "assumption": "**替代做法怎么表达，是这份简报自设的假设，不是金标的事实。** 金标只在 `decision_windows` 里给了「当时怎么做」，没给「还能怎么做」。",
+    "degraded": "**降级项意味着下面某些数字不能按字面读。** 逐条列在文末。"
+  },
+  "markers": {
+    "nonreproducible": "[不可端到端复现]",
+    "compressed": "[压缩模式·与轮=天不可比]",
+    "model_internal": "[模型内对照·非预测]",
+    "assumption": "[干预口径为本文自设假设]",
+    "degraded": "[降级项]"
+  }
+}

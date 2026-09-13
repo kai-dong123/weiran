@@ -193,29 +193,27 @@ def run_counterfactual(
 
       B. 机制版：P2 公开之后，P3 不再出现压制行为。
          这是乐观上界 —— 它假设「主动说清」真的能消掉「需要压」的动机。
+
+    **分叉点与干预落点必须都在 P2。** 这是修正过的一处错位：原先分叉取
+    `timeline[p2_index].state_after`（P2 **结束**时的状态）、而 `later` 从
+    `p2_index + 1` 起算，于是 `counterfactual()` 把干预施加到了 **P3** 那一步
+    —— 断言文字说「在 P2 公开」，算出来的却是「在删帖争议已经烧起来之后才
+    公开」。两个分支都照样「通过」，所以不看数字根本发现不了。
+    实测差别：修正前 A 版 trust@P5 = 0.4368（Δ +0.1740），修正后 0.3847
+    （Δ +0.1219）—— 错位把收益夸大了 43%。
+
+    正确的口径是「P2 这个阶段自己承担这次干预」，所以 `later` 从 P2 起算、
+    分叉状态取 P1 结束时的状态（P2 是首阶段时取基线）。
     """
     p2_index = next(i for i, r in enumerate(timeline) if r.phase_id == "P2")
-    state_at_p2 = timeline[p2_index].state_after
+    fork_state = (timeline[p2_index - 1].state_after
+                  if p2_index > 0 else WorldState.baseline(engine.params))
 
-    later = {r.phase_id: behaviors[r.phase_id] for r in timeline[p2_index + 1:]}
+    later = {r.phase_id: behaviors[r.phase_id] for r in timeline[p2_index:]}
     later_dts = {pid: dts[pid] for pid in later}
 
-    disclosure = engine.excitation["disclosure"]
-    strong = {d: disclosure.get(d, 0.0) * 2.5 for d in DIMENSIONS}
-
-    # A. 激励版
-    branch_a = engine.counterfactual(
-        state_at_p2, intervention=strong, behaviors_after=later, dts=later_dts
-    )
-
-    # B. 机制版：P3 的压制行为被剔除
-    suppressed = dict(later)
-    if "P3" in suppressed:
-        suppressed["P3"] = [
-            b for b in suppressed["P3"] if b != "suppression"
-        ]
-    branch_b = engine.counterfactual(
-        state_at_p2, intervention=strong, behaviors_after=suppressed, dts=later_dts
+    branch_a, branch_b = engine.two_branch_futures(
+        fork_state, behaviors_after=later, dts=later_dts,
     )
 
     actual_p5 = timeline[-1].state_after["trust"]

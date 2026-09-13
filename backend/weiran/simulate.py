@@ -77,6 +77,11 @@ class RoundLog:
     calls: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # 本轮的调用失败次数与最慢单次。**这两个字段存在的理由就是上面那段注释**：
+    # 「第二轮 409.6s」那次故障里，能区分「模型慢」与「端点在限流」的只有它们。
+    # `errors` 不是它们 —— 那是 `env.step` 抛的异常数，与 LLM 调用无关。
+    failures: int = 0
+    slowest: float = 0.0
     actions: list[dict] = field(default_factory=list)
     errors: int = 0
     # 世界状态：本轮识别出的行为构成，以及推进后的六维取值。
@@ -228,6 +233,10 @@ class CallStats:
     slowest: float = 0.0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # 每次调用的耗时。`slowest` 是**最大值，做不了差分**，所以想按轮报
+    # 「本轮最慢一次」就必须留下逐次样本。代价是每次调用一个 float（可忽略），
+    # 收益是那个 409s 的故障下次能直接定位到轮次。
+    samples: list[float] = field(default_factory=list)
 
     @property
     def mean(self) -> float:
@@ -275,6 +284,7 @@ def instrument_model(model) -> CallStats:
     def _record(el: float, result) -> None:
         stats.seconds += el
         stats.slowest = max(stats.slowest, el)
+        stats.samples.append(el)
         # 流式响应没有 usage，结构化解析的返回也不是 ChatCompletion。
         usage = getattr(result, "usage", None)
         if usage is not None:
@@ -294,6 +304,10 @@ def instrument_model(model) -> CallStats:
                     result = await original(self, *a, **kw)
                 except BaseException:
                     stats.failures += 1
+                    # 失败的调用**也要记耗时**。超时/重试那一次往往正是最慢的
+                    # 一次（409s 那次就可能落在这一支），只记成功的会让
+                    # 「本轮最慢」系统性偏小 —— 而它存在的意义就是抓这种。
+                    stats.samples.append(time.monotonic() - t0)
                     raise
                 else:
                     _record(time.monotonic() - t0, result)
@@ -306,6 +320,7 @@ def instrument_model(model) -> CallStats:
                     result = original(self, *a, **kw)
                 except BaseException:
                     stats.failures += 1
+                    stats.samples.append(time.monotonic() - t0)
                     raise
                 else:
                     _record(time.monotonic() - t0, result)
@@ -670,7 +685,8 @@ async def _run(
     for i in range(rounds):
         t0 = time.monotonic()
         before = (stats.calls, stats.seconds,
-                  stats.prompt_tokens, stats.completion_tokens)
+                  stats.prompt_tokens, stats.completion_tokens,
+                  stats.failures, len(stats.samples))
         entry = RoundLog(index=i)
 
         step: dict = {a: LLMAction() for a in agents_list}
@@ -727,6 +743,9 @@ async def _run(
         entry.llm_seconds = round(stats.seconds - before[1], 2)
         entry.prompt_tokens = stats.prompt_tokens - before[2]
         entry.completion_tokens = stats.completion_tokens - before[3]
+        entry.failures = stats.failures - before[4]
+        # 最慢一次取本轮样本的最大值 —— `stats.slowest` 是全程最大值，差分不出来。
+        entry.slowest = round(max(stats.samples[before[5]:], default=0.0), 2)
 
         # 世界状态推进。**跑在这一轮的动作上，而不是素材上。**
         action_texts = texts_from_actions(new, load_posts(db_path))
@@ -753,8 +772,12 @@ async def _run(
         # 两者差得远，说明时间花在了 LLM 之外（等待、锁、重试）。
         tok = (f"  token {entry.prompt_tokens}+{entry.completion_tokens}"
                if entry.prompt_tokens or entry.completion_tokens else "")
+        # 慢与失败都要在**当轮**就看见，事后再翻日志已经晚了 —— 409s 那次
+        # 就是因为在终端上只看到「LLM 5.4s」而实际墙钟 409s，无从定位。
+        slow = f"  最慢一次 {entry.slowest:5.1f}s" if entry.slowest else ""
+        fail = f"  ⚠️ 失败 {entry.failures} 次" if entry.failures else ""
         print(f"  轮 {i}: 墙钟 {entry.seconds:6.1f}s  "
-              f"LLM {entry.llm_seconds:6.1f}s / {entry.calls} 次  "
+              f"LLM {entry.llm_seconds:6.1f}s / {entry.calls} 次{slow}{fail}  "
               f"动作 {len(new)} 条{tok}"
               + (f"  错误 {entry.errors}" if entry.errors else "")
               + (f"  [阶段 {entry.phase_id}]" if entry.phase_id else ""))
@@ -950,6 +973,7 @@ def main(argv: list[str] | None = None) -> int:
                      "llm_seconds": r.llm_seconds, "calls": r.calls,
                      "prompt_tokens": r.prompt_tokens,
                      "completion_tokens": r.completion_tokens,
+                     "failures": r.failures, "slowest": r.slowest,
                      "phase_id": r.phase_id,
                      "injected": r.injected,
                      "injection_sample": r.injection_sample,

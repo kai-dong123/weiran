@@ -524,6 +524,63 @@ class WorldStateEngine:
             first = False
         return timeline
 
+    def two_branch_futures(
+        self,
+        state: WorldState,
+        *,
+        behaviors_after: dict[str, list[str]],
+        dts: dict[str, float],
+        action: str = "disclosure",
+        scale: float = 2.5,
+        drop: str = "suppression",
+    ) -> tuple[dict[str, WorldState], dict[str, WorldState]]:
+        """「现在换成 X 会怎样」的两个分支 —— **只报一个数会假装它比实际更确定**。
+
+        为什么是两个而不是一个：一次强公开之后，后续的行为本身会不会跟着变，
+        模型答不了。所以给两端，并写明两端各自的假设：
+
+          A **激励版**：后续行为不变，只在这一步叠加一次强公开。
+            **保守下界** —— 它假设公开了也照样会有人去压。
+          B **机制版**：公开之后那件不可逆的事（`drop`，默认劝删）不再发生。
+            **乐观上界** —— 它假设「主动说清」真的能消掉「需要压」的动机。
+
+        **`behaviors_after` 必须把「做决定的那个阶段」自己作为第一个键。**
+        `counterfactual()` 只把 `extra` 施加在第一步（见那里的 `first` 标志），
+        所以若从下一个阶段起算，干预就整整晚了一个阶段 —— 而曲线照样平滑、
+        不报错、也不抛异常。
+
+        （这不是假设：`validate.py` 的 AS-10 原先正好踩这个坑 —— 断言文字说
+        「假设 P2 主动公开」，实际干预落在 P3，实测把收益从 +0.1219 夸大成
+        +0.1740，差了 43%。两个分支都仍然「通过」，所以不看数字根本发现不了。）
+
+        Args:
+            action: 用作干预的行为类型，默认 `disclosure`。
+            scale: 干预强度的倍数。**2.5 是本项目沿用的约定值，不是标定出来的
+                系数** —— 它让 `disclosure` 在 `attention` 与 `trust` 上顶到
+                归一化上限（`REF_WEIGHT`），于是这两个维度的**激励项**对再加大
+                倍数不敏感（`trust` 仍会经由耦合变化，实测 K 从 2.5 加到 10
+                时 trust 终值 0.7424 → 0.7706）。
+            drop: 机制版里被剔除的行为类型。
+
+        Returns:
+            `(branch_a, branch_b)`，均为「阶段 id -> 该阶段末状态」。
+        """
+        table = self.excitation[action]
+        intervention = {d: table.get(d, 0.0) * scale for d in DIMENSIONS}
+        branch_a = self.counterfactual(
+            state, intervention=intervention,
+            behaviors_after=behaviors_after, dts=dts,
+        )
+        suppressed = {
+            pid: [b for b in behaviors if b != drop]
+            for pid, behaviors in behaviors_after.items()
+        }
+        branch_b = self.counterfactual(
+            state, intervention=intervention,
+            behaviors_after=suppressed, dts=dts,
+        )
+        return branch_a, branch_b
+
     # -- 整段推演 ----------------------------------------------------------
 
     def run(

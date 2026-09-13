@@ -1,12 +1,14 @@
 # 「未然」—— 校园舆情推演与决策辅助系统
 
 > 全球校园人工智能算法精英大赛（AIC）·「AI+开源」· 方向（一）开源赋能的 AI 应用创新
-> 状态：**开发中**（骨架与场景已就绪；世界状态引擎完成，**六维闭环已接入逐轮循环**）
+> 状态：**开发中**（骨架与场景已就绪；六维闭环已接入逐轮循环，**决策简报已能产出**）
 
 面对校园突发事件，管理者往往在两难中做决定：公开信息会引发舆情，不公开则损耗信任。
 **「未然」把这场两难提前演练一遍**——用多智能体仿真重放事件的舆论演化，逐轮追踪
 关注、恐慌、信任、极化、风险、稳定六个维度的状态，识别风险拐点，并在你真正开口之前
-给出可比较的处置方案。
+给出可比较的处置方案。第三件事由 [`brief.py`](backend/weiran/brief.py) 产出——
+它把金标的 5 个决策窗口逐行摊开，在每个窗口上都问一次「当时换个做法会怎样」，
+并把「这只是模型内的对照、不是预测」写进正文、用机器检查强制它在场。
 
 **闭环是怎么闭上的。** 每一轮：读 agent 的动作 → 归类成行为信号 → 推进六维状态 →
 **把状态重新注回下一轮每个 agent 的输入**。回注的不是数值而是定性档位与方向
@@ -58,16 +60,18 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 108 条，一次跑完（推荐）
+python -m pytest tests/             # 142 条，一次跑完（推荐）
 
-# 五套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
+# 六套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
 python tests/test_world_state.py    # 17/17
 python tests/test_llm.py            # 19/19
 python tests/test_stance.py         # 26/26
 python tests/test_perception.py     # 32/32
+python tests/test_brief.py          # 34/34
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
+python -m weiran.brief              # 决策简报（读已有产出，不调 LLM）
 ```
 
 预期输出：
@@ -105,6 +109,38 @@ python -m weiran.simulate --agents 3 --rounds 3     # 省钱冒烟（会压缩�
 > 是两条不同的曲线。落盘的 `meta` 里带 `compressed` 与 `comparable_to_round_day`，
 > 启动时也会打印警告，免得日后被当成「轮 = 天」的结果引用。
 
+### 6. 生成决策简报（读已有产出，**不花钱**）
+
+```bash
+cd backend
+python -m weiran.brief                    # 默认读 data/simulation/twitter_rounds.json
+python -m weiran.brief --stdout           # 顺带把全文打到终端
+python -m weiran.brief --intervention-scale 1.0
+```
+
+产出 `data/simulation/brief.md`（给人看）与 `brief.json`（给别的模块与测试用）。
+仓库里那份样例就是本仓库那次 3 agent × 3 轮真实推演的简报。
+
+**怎么看它。** 简报把金标的 5 个决策窗口逐行列出：当时当局是怎么做的、该窗口
+落到本次运行的哪一轮（压缩模式下两个阶段会挤进同一轮，此时数字必然相同，
+**不可单独归因**）、以及**在该模型内部**「换成主动公开」这条路会走向哪里。
+
+几条必须一起读的限制，简报正文里会自己声明，并有机器检查强制它在场：
+
+- **反事实不是预测。** 分支假设「后续行为不变」，而现实里一旦真的公开，
+  agent 的反应本身就会变——那正是模型答不了的部分。A 版（激励版）与
+  B 版（机制版）**不是区间，是两个模型假设下的两个点**。
+- **不做评分。** 不引用金标里那句作者手写的预期形状，也不把离线重放的
+  偏离量当分数。金标自己声明它不是观测值。
+- **不给建议。** 只说在该模型内部两条路径的高低，不说「应当采取 X」。
+- **拐点一节并列报出模型侧与叙事侧，不一致就写「不一致」。** 实测里金标把
+  拐点标在 P3，而「极化增速超过关注增速」这个可检信号在第 0 轮就已成立——
+  简报把它写成**不一致**，而不是「拐点被复现了」。
+
+简报的**生成**是确定的（同输入同输出，`repro_check.py` 逐字校验）；
+它**读取的那条曲线**不是（agent 每次说的话不同）。这两句话必须同屏出现，
+否则「不可复现」会从一条有边界的性质变成不做确定性的借口。
+
 ---
 
 ## 目录结构
@@ -122,15 +158,22 @@ backend/
     perception.py   感知层：态势与知情范围 → 逐轮注入文本（不依赖 LLM）
     simulate.py     推演驱动：读动作 → 归类 → 推进状态 → 回注 → 落盘
     validate.py     金标校验（离线重放 + 可机检断言）
+    brief.py        决策简报：5 个窗口 × 两条分支未来 + 拐点对照（不依赖 LLM）
     smoke.py        连通性冒烟（端点 / JSON / 中文 / 推理开关成本）
-  repro_check.py    可复现性分级自检（三层各测一遍）
+  repro_check.py    可复现性分级自检（四层各测一遍）
   tests/
     test_store.py        14 条
     test_world_state.py  17 条
     test_llm.py          19 条
     test_stance.py       26 条
     test_perception.py   32 条
-    —— 共 108 条，`python -m pytest tests/` 一次跑完
+    test_brief.py        34 条
+    —— 共 142 条，`python -m pytest tests/` 一次跑完
+data/
+  simulation/                      推演产出（入库：是「跑得通」的证据）
+    twitter_rounds.json            逐轮状态、行为、成本、注入次数
+    brief.md / brief.json          决策简报（上一份产出的对照，不调 LLM）
+    *_profiles.*  *_cache.json     OASIS profile 与归类缓存
 benchmark/
   scenarios/
     employment_trust_crisis/     虚构场景：某大学《就业质量报告》信任危机
@@ -158,6 +201,11 @@ docs/
 - **不做没有收益的复杂度**。语料仅 33 个 chunk 的规模下，混合检索（RRF）不会带来
   可测量的召回提升，因此只保留词法与向量两条独立通路，不做融合。
   这一点会在技术报告中如实写明，而不是假装做了。
+- **产出物本身也要能离线复现**。原始推演曲线端到端复现不了（agent 每次说的话
+  不同），但**给人看的那份东西**没有理由跟着一起不确定。决策简报不含 LLM、
+  不含随机数、不含时间戳，因此同输入必然同输出，并被 `repro_check.py` 逐字校验。
+  这条例外不是洁癖：不划这条边界，「不可复现」就会从一条有范围的结论，
+  膨胀成所有地方都可以不确定的理由。
 - **代价也写进文档，不只写收益**。六维回注会经 agent 记忆逐轮累积，
   实测每轮 prompt 比不回注高得越来越多（3 轮里从 +12% 拉到 +100%）。
   所以闭环**不是**上下文增长的解药，它现在是加重项——这句话写在
