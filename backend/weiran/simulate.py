@@ -624,11 +624,17 @@ async def _run(
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .config import ensure_console_encoding
+    ensure_console_encoding()
+
     ap = argparse.ArgumentParser(description="多智能体推演驱动")
     ap.add_argument("--out", default=DEFAULT_OUT)
-    ap.add_argument("--rounds", type=int, default=10)
+    # 默认值留给 config（.env 的 OASIS_DEFAULT_MAX_ROUNDS / OASIS_MAX_AGENTS）——
+    # 那两个旋钮此前没有任何消费方，是死的。用 None 作哨兵，读到 config 后再填。
+    ap.add_argument("--rounds", type=int, default=None,
+                    help="推演轮数。默认取 .env 的 OASIS_DEFAULT_MAX_ROUNDS")
     ap.add_argument("--agents", type=int, default=None,
-                    help="只用前 N 个 agent（冒烟用）")
+                    help="只用前 N 个 agent（冒烟用）。默认取 .env 的 OASIS_MAX_AGENTS")
     ap.add_argument("--platform", choices=("twitter", "reddit"), default="twitter")
     ap.add_argument("--thinking", action="store_true",
                     help="开启模型推理（默认关闭：实测输出 token 增至约 12 倍）")
@@ -663,9 +669,21 @@ def main(argv: list[str] | None = None) -> int:
     if not out_dir.is_absolute():
         out_dir = REPO_ROOT / out_dir
 
+    # 命令行显式传参优先；没传才回落到 .env 的旋钮。
+    # 回落时**把来源标出来** —— 「我明明设了 5 个 agent，怎么跑了 27 个」
+    # 这种问题只能靠日志回答。
+    rounds = args.rounds if args.rounds is not None else config.simulation.max_rounds
+    agents = args.agents if args.agents is not None else config.simulation.max_agents
+    src = []
+    if args.rounds is None:
+        src.append(f"轮数取自 .env OASIS_DEFAULT_MAX_ROUNDS={rounds}")
+    if args.agents is None:
+        src.append(f"agent 数取自 .env OASIS_MAX_AGENTS={agents}")
+
     print(f"模型 {config.llm.model} · 推理={'开' if args.thinking else '关'} · "
-          f"平台={args.platform} · 轮数={args.rounds} · "
-          f"agent={args.agents if args.agents else '全部'}")
+          f"平台={args.platform} · 轮数={rounds} · agent={agents}")
+    for line in src:
+        print(f"  （{line}；命令行显式传参会覆盖它）")
 
     # 归类用独立的客户端：它要的是稳定与便宜，不需要推理。
     classifier_llm = None
@@ -675,7 +693,7 @@ def main(argv: list[str] | None = None) -> int:
 
     result = asyncio.run(_run(
         config, out_dir,
-        rounds=args.rounds, agents=args.agents, platform=args.platform,
+        rounds=rounds, agents=agents, platform=args.platform,
         thinking=args.thinking, max_tokens=args.max_tokens,
         seed_text=args.seed_text,
         world_state=not args.no_world_state,

@@ -15,7 +15,6 @@ license = { text = "AGPL-3.0-only" }
 dependencies = [
     "requests>=2.31",
     "numpy>=1.26",
-    "Flask>=3.0",
 ]
 
 # 源码在 backend/ 下，而包名是 weiran —— 这个映射让

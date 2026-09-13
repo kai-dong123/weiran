@@ -10,9 +10,10 @@
 # ---- 核心运行时 ----
 # 刻意不引入 openai SDK / python-dotenv：需求各只有十几行，
 # 少一个依赖就少一个「评委装不上」的失败点。见 weiran/llm.py、weiran/config.py 的注释。
+# 同理**不引入 Flask** —— 本项目是 CLI 优先，没有任何 Web 服务，
+# 全仓没有一个文件 import 它。
 requests>=2.31
 numpy>=1.26
-Flask>=3.0
 
 # ---- 仿真内核（版本锁死，勿升级）----
 camel-oasis==0.2.5

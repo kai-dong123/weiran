@@ -160,6 +160,9 @@ def load(conn, scenario_dir: str | Path, *, reset: bool = False) -> dict[str, in
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .config import ensure_console_encoding
+    ensure_console_encoding()
+
     ap = argparse.ArgumentParser(description="把场景种子材料装载进本地知识库")
     ap.add_argument(
         "--scenario",
@@ -170,9 +173,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--reset", action="store_true", help="装载前清空数据表")
     args = ap.parse_args(argv)
 
-    from .config import REPO_ROOT
+    from .config import DEFAULT_DB_PATH, REPO_ROOT
 
-    db_path = Path(args.db) if args.db else REPO_ROOT / "data" / "weiran.db"
+    # 默认路径从 config 取，不在这里再写一遍 —— 两处各写一份会悄悄漂移。
+    db_path = Path(args.db) if args.db else DEFAULT_DB_PATH
     scenario_dir = Path(args.scenario)
     if not scenario_dir.is_absolute():
         scenario_dir = REPO_ROOT / scenario_dir

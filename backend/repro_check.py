@@ -156,6 +156,9 @@ def check_end_to_end(rounds: int, agents: int) -> bool:
 
 
 def main() -> int:
+    from weiran.config import ensure_console_encoding
+    ensure_console_encoding()
+
     ap = argparse.ArgumentParser(description="可复现性分层检查")
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--agents", type=int, default=5)

@@ -39,7 +39,7 @@ cp .env.example .env
 | 变量 | 说明 |
 |---|---|
 | `LLM_API_KEY` | 服务商密钥 |
-| `LLM_BASE_URL` | OpenAI 兼容端点根地址，形如 `https://api.siliconflow.cn/v1` |
+| `LLM_BASE_URL` | OpenAI 兼容端点根地址，形如 `https://api.deepseek.com/v1` |
 | `LLM_MODEL_NAME` | 对话模型 id |
 
 `.env` 已在 `.gitignore` 中，**不会入库**。提交前自检：`git status` 里不应出现 `.env`。
@@ -50,8 +50,13 @@ cp .env.example .env
 
 ```bash
 cd backend
-python tests/test_store.py          # 应当 14/14 通过
-python tests/test_world_state.py    # 应当 17/17 通过
+python -m pytest tests/             # 76 条，一次跑完（推荐）
+
+# 四套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
+python tests/test_store.py          # 14/14
+python tests/test_world_state.py    # 17/17
+python tests/test_llm.py            # 19/19
+python tests/test_stance.py         # 26/26
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
 ```
@@ -77,12 +82,23 @@ python -m weiran.validate           # 世界状态引擎离线重放校验
 ```
 backend/
   weiran/
-    config.py      配置装载（缺项一次性列全，不静默降级）
-    llm.py         OpenAI 兼容客户端 + 用量账本
-    store.py       SQLite + FTS5 + 向量列
-    scenario.py    场景装载（不依赖 LLM，可离线跑）
+    config.py       配置装载（缺项一次性列全，不静默降级）
+    llm.py          OpenAI 兼容客户端 + 用量账本
+    store.py        SQLite + FTS5 + 向量列
+    scenario.py     场景装载（不依赖 LLM，可离线跑）
+    world_state.py  六维耦合弛豫引擎（不依赖 LLM，可离线跑）
+    stance.py       行为归类器：自由文本 → 六维行为信号
+    profiles.py     金标角色 → OASIS profile + 知情映射
+    simulate.py     推演驱动：读动作 → 归类 → 推进状态 → 落盘
+    validate.py     金标校验（离线重放 + 可机检断言）
+    smoke.py        连通性冒烟（端点 / JSON / 中文 / 推理开关成本）
+  repro_check.py    可复现性分级自检（三层各测一遍）
   tests/
-    test_store.py  14 条测试，直接 python 运行，无需 pytest
+    test_store.py        14 条
+    test_world_state.py  17 条
+    test_llm.py          19 条
+    test_stance.py       26 条
+    —— 共 76 条，`python -m pytest tests/` 一次跑完
 benchmark/
   scenarios/
     employment_trust_crisis/     虚构场景：某大学《就业质量报告》信任危机

@@ -358,6 +358,10 @@ def _print_report(comparison, assertions, ref, overall_mae) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 必须在任何 print 之前 —— 否则重定向输出时会先崩在打印上（见函数注释）。
+    from .config import ensure_console_encoding
+    ensure_console_encoding()
+
     ap = argparse.ArgumentParser(description="世界状态引擎金标校验")
     ap.add_argument("--scenario", default="benchmark/scenarios/employment_trust_crisis")
     ap.add_argument("--json", default=None, help="把完整结果写到该路径")

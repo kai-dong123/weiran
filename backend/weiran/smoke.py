@@ -182,6 +182,9 @@ def _report(probes: list[Probe], ledger: Ledger, price_in: float, price_out: flo
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .config import ensure_console_encoding
+    ensure_console_encoding()
+
     ap = argparse.ArgumentParser(description="LLM 端点最小连通性冒烟")
     ap.add_argument("--price-in", type=float, default=0.0,
                     help="每百万输入 token 的单价（元）；不填则不报金额")

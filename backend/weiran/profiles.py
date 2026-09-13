@@ -622,6 +622,9 @@ def generate(
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .config import ensure_console_encoding
+    ensure_console_encoding()
+
     ap = argparse.ArgumentParser(description="角色画像生成")
     ap.add_argument("--scenario", default=DEFAULT_SCENARIO)
     ap.add_argument("--out", default=DEFAULT_OUT)
