@@ -27,8 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from weiran.perception import (  # noqa: E402
     DIRECTION_ZH, FORBIDDEN, INJECT_ATTR, ActorKnowledge, KnowledgeError,
     Phase, active_phase_by_round, build_block, days_per_round,
-    inject_round_context, load_knowledge, load_phases, phase_schedule,
-    render_knowledge, render_state, tier_of,
+    inject_round_context, knowledge_cutoff_by_round, load_knowledge,
+    load_phases, phase_schedule, render_knowledge, render_state, tier_of,
 )
 from weiran.world_state import DIMENSION_ZH, DIMENSIONS, WorldState  # noqa: E402
 
@@ -448,7 +448,8 @@ def test_injection_lands_on_each_agent_separately():
     agents = [_FakeAgent(i) for i in range(3)]
     st = WorldState.baseline().as_dict()
     blocks = inject_round_context(
-        agents, round_index=0, state=st, prev=None, knowledge=k)
+        agents, round_index=0, state=st, prev=None, knowledge=k,
+        known_upto_day=0.0)
     assert len(blocks) == 3
     for a in agents:
         assert getattr(a, INJECT_ATTR, ""), "有 agent 拿到空块"
@@ -462,7 +463,8 @@ def test_unknown_agent_id_is_loud():
     try:
         inject_round_context(
             [_FakeAgent(999)], round_index=0,
-            state=WorldState.baseline().as_dict(), prev=None, knowledge=k)
+            state=WorldState.baseline().as_dict(), prev=None, knowledge=k,
+            known_upto_day=0.0)
     except KnowledgeError as exc:
         assert "999" in str(exc)
     else:
@@ -473,7 +475,7 @@ def test_knowledge_can_be_switched_off_entirely():
     agents = [_FakeAgent(0)]
     inject_round_context(
         agents, round_index=0, state=WorldState.baseline().as_dict(),
-        prev=None, knowledge=None)
+        prev=None, knowledge=None, known_upto_day=0.0)
     assert isinstance(getattr(agents[0], INJECT_ATTR), str)
 
 
@@ -552,6 +554,164 @@ def test_the_wrapper_really_prepends_the_block_to_the_model_message():
     finally:
         SocialAgent.astep = saved_astep
         SocialAgent._weiran_injection_installed = saved_flag
+
+
+# ---------------------------------------------------------------------------
+# 知情范围的按轮裁剪（泄漏防线）
+#
+# 这一组补的是一个**实测出来的**缺陷：`knows` 原先每轮原样注入，于是 8 个
+# 角色在第 0 轮（P1 引爆当天）就拿到了 P3 才下发的删帖通知、P4 才发生的
+# 自媒体转载。它没有任何症状 —— 注入照常发生、块不空、各人不同、
+# 三次断言全过 —— 只是把未来告诉了 agent。
+#
+# 所以下面这些测试的共同形态是：**在某个轮次上断言某条事实不在场**。
+# 「不在场」是唯一能抓住这类缺陷的断言形态，断言「在场」永远抓不到。
+
+def _cut(rounds: int):
+    """按真实金标算一遍每轮知情截止日。"""
+    ph = load_phases(SCENARIO)
+    sch, dpr, _ = phase_schedule(ph, rounds)
+    return knowledge_cutoff_by_round(ph, rounds, dpr, sch)
+
+
+def test_late_facts_are_absent_before_their_phase():
+    """F9（P3 删帖通知）在第 0 轮必须不在场，且到 P3 那天必须出现。"""
+    k = load_knowledge(SIM, SCENARIO)
+    st = WorldState.baseline().as_dict()
+    e = k.by_actor["A07"]          # 陈默，辅导员，knows 含 F9/F10
+    cut = _cut(15)
+
+    early = render_knowledge(e, known_upto_day=cut[0])
+    assert "删帖" not in early, (
+        "第 0 轮就注入了 P3 的删帖通知 —— 这就是被修掉的那个泄漏")
+    assert "78.6%" in early, "背景事实被一起裁掉了：裁剪只该裁后期事实"
+
+    late = render_knowledge(e, known_upto_day=cut[5])
+    assert "删帖" in late, "到了 P3 当天（day 5）事实仍未注入"
+
+
+def test_late_facts_arrive_on_their_own_phase_day():
+    """F11（P4 自媒体转载）早一轮都不能出现，晚一轮也不行。"""
+    k = load_knowledge(SIM, SCENARIO)
+    e = k.by_actor["A06"]          # 吴海燕，学工，knows 含 F9 与 F11
+    cut = _cut(15)
+
+    assert "转载" not in render_knowledge(e, known_upto_day=cut[5]), \
+        "F11 是 P4（day 8）的事实，day 5 就该还没到期"
+    assert "转载" in render_knowledge(e, known_upto_day=cut[8]), \
+        "到了 P4 当天（day 8）F11 仍未注入"
+
+
+def test_background_facts_are_known_from_round_zero():
+    """没打 phase 标签的事实从第 0 轮起已知 —— 裁剪不能把背景一起裁掉。"""
+    k = load_knowledge(SIM, SCENARIO)
+    e = k.by_actor["A01"]
+    text = render_knowledge(e, known_upto_day=0.0)
+    assert "78.6%" in text, "F1 是背景事实，第 0 轮就该知道"
+    assert "删帖" not in text, "F9 是 P3 事实，第 0 轮不该知道"
+    assert "32.2%" in text, "F7 在 hidden 里且无 phase 标签，第 0 轮就该知道"
+
+
+def test_only_the_three_late_facts_carry_a_phase_tag():
+    """金标里到底几条打了标签。数字变了要有人看一眼，别默默漂移。"""
+    raw = json.loads((SCENARIO / "reference_data.json").read_text(encoding="utf-8"))
+    tagged = {f["id"]: f["phase"] for f in raw["facts"] if f.get("phase")}
+    assert tagged == {"F9": "P3", "F10": "P3", "F11": "P4"}, \
+        f"带 phase 标签的事实变了：{tagged}"
+
+
+def test_phase_tag_pointing_nowhere_is_loud():
+    """phase 写错一个字母 = 那条事实永不注入，必须当场报错。"""
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        (tmp / "actor_knowledge.json").write_text(
+            json.dumps({"actors": {"A01": {
+                "user_id": 0, "name": "甲", "group": "某组",
+                "knows": ["F1"], "hidden": []}}}, ensure_ascii=False),
+            encoding="utf-8")
+        raw = json.loads((SCENARIO / "reference_data.json").read_text(encoding="utf-8"))
+        raw["facts"] = [{"id": "F1", "text": "某事实", "phase": "P9"}]
+        (tmp / "reference_data.json").write_text(
+            json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        try:
+            load_knowledge(tmp, tmp)
+        except KnowledgeError as exc:
+            assert "P9" in str(exc), f"报错没说清是哪个标签：{exc}"
+            assert "F1" in str(exc), f"报错没说清是哪个事实：{exc}"
+        else:
+            raise AssertionError("指向不存在阶段的事实标签被静默接受了")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_cutoff_is_monotone_and_matches_phase_days():
+    """轮=天时截止日恰好等于阶段 day；且任何模式下都只能单调不减。"""
+    cut = _cut(15)
+    assert cut[0] == 0.0 and cut[5] == 5.0 and cut[8] == 8.0 and cut[14] == 14.0
+    days = [cut[r] for r in range(15)]
+    assert days == sorted(days), f"知情范围缩回去了：{days}"
+
+
+def test_cutoff_in_compressed_mode_covers_the_injected_phases():
+    """压缩模式下，本轮注入的事件所对应的事实必须同轮到期。
+
+    3 轮覆盖 14 天时 `active_phase_by_round` 给 {0:P1, 1:P3, 2:P5} ——
+    P4 被跳过，而第 1 轮注入的恰恰是「P3,P4」。只看它，F11 会拖到第 2 轮
+    才到期，比它实际进入时间线晚一整轮。这条测试锁的就是那个补丁。
+    """
+    cut = _cut(3)
+    assert 8.0 in cut.values(), (
+        "压缩模式下 P4 的 day 8 从未成为截止日 —— 注入的 P4 事实被晚了")
+    assert cut[1] == 8.0, f"第 1 轮注入了 P3,P4，截止日应为 8.0，实为 {cut[1]}"
+
+
+def test_cutoff_is_increasing_so_nothing_is_forgotten():
+    """截止日只能前进。逐轮取 max 而不是取本轮值，是为了防「已知又变不知」。"""
+    cut = _cut(3)
+    seq = [cut[r] for r in range(3)]
+    assert seq == sorted(seq) and seq[0] < seq[-1], seq
+
+
+def test_no_phases_means_late_facts_never_appear():
+    """`--no-phases` 时截止日恒为 0：事件不注入，相关事实也不该知道。
+
+    只关事件不关事实，会造出一个「场景里根本没发生过、但 agent 知道」的
+    知情 —— 比两者都开更古怪。
+    """
+    k = load_knowledge(SIM, SCENARIO)
+    e = k.by_actor["A07"]
+    text = render_knowledge(e, known_upto_day=0.0)
+    assert "删帖" not in text and "劝删" not in text
+
+
+def test_mismatched_lengths_are_loud():
+    """事实与到期日必须逐位对应；对不上时报错而不是 zip 默默截断。"""
+    e = ActorKnowledge("A01", 0, "甲", "某组",
+                       knows=("甲", "乙"), knows_days=(0.0,))
+    try:
+        render_knowledge(e, known_upto_day=5.0)
+    except KnowledgeError as exc:
+        assert "长度" in str(exc), f"报错没说明是长度问题：{exc}"
+    else:
+        raise AssertionError("长度不一致被 zip 静默截断了")
+
+
+def test_known_upto_day_is_required_not_defaulted():
+    """`inject_round_context` 不许有「不过滤」的默认值。
+
+    默认值一旦是「不过滤」，忘记传就等于把所有后期事实泄给第 0 轮，
+    而且没有任何地方会报出来 —— 正是这个缺陷能长期存在的原因。
+    """
+    k = load_knowledge(SIM, SCENARIO)
+    try:
+        inject_round_context(
+            [_FakeAgent(0)], round_index=0,
+            state=WorldState.baseline().as_dict(), prev=None, knowledge=k)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError(
+            "known_upto_day 有了默认值 —— 静默泄漏的入口又开了")
 
 
 # ---------------------------------------------------------------------------

@@ -107,7 +107,7 @@ def check_classifier() -> bool:
 # 第 2.5 层：简报 —— 同样的产出，同样的文字
 # ---------------------------------------------------------------------------
 
-def check_brief() -> bool:
+def check_brief() -> bool | None:
     """把「确定性」从引擎推进到**产出物**。
 
     前面两层说的是「同样的输入给同样的输出」，这一层说的是
@@ -116,6 +116,12 @@ def check_brief() -> bool:
 
     这一层的确定性是**真的**（简报里没有 LLM、没有随机数、没有时间戳），
     所以它进退出码，与第 3 层不同规格。
+
+    Returns:
+        True / False / **None**。None 表示「没测到」（缺产出文件）。
+        这里刻意返回三态而不是把「没测到」折成 True：一份没跑过的检查
+        在汇总表里显示 `✅ 确定`，比没有这条检查更坏 —— 它会让整张表
+        的可信度一起贬值。第一版就是折成 True 的。
     """
     print("\n【第 2.5 层】简报：同一份产出 → 同一份文字")
     import json
@@ -125,9 +131,9 @@ def check_brief() -> bool:
 
     run_path = REPO_ROOT / "data" / "simulation" / "twitter_rounds.json"
     if not run_path.is_file():
-        print(f"  ⏭  缺少 {run_path.name}，本层跳过 —— "
-              f"**这不是「通过」**，是没测到")
-        return True
+        print(f"  ⏭  缺少 {run_path.name} —— **这不是「通过」，是没测到**。"
+              f"该文件随仓库入库，缺了说明仓库不完整或产出被删。")
+        return None
 
     rd = B.load_rounds(run_path)
     gold = B.load_gold(REPO_ROOT / B.DEFAULT_SCENARIO)
@@ -242,11 +248,17 @@ def main() -> int:
 
     print("\n" + "=" * 62)
     for k, v in results.items():
-        print(f"  {k:<8} {'✅ 确定' if v else '❌ 不确定'}")
+        print(f"  {k:<8} "
+              + ("⏭ 未测到" if v is None else "✅ 确定" if v else "❌ 不确定"))
     print("=" * 62)
     # **第 3 层不进退出码** —— 它不可复现是已知且已解释的性质，不是失败。
     # 把它算进去会让这个脚本天天红，然后就没人看了。前两层与简报层进。
-    return 0 if all(results[k] for k in ("归类", "引擎", "简报")) else 1
+    # 「未测到」(None) **算失败**：产出文件随仓库入库，缺了就是仓库不完整，
+    # 而一个「跑不动所以全绿」的自检脚本正好是它要防的那种东西。
+    gated = [results[k] for k in ("归类", "引擎", "简报")]
+    if any(v is None for v in gated):
+        print("  ⚠️ 有检查未测到（见上）—— 未测到按失败计，不按通过计")
+    return 0 if all(v is True for v in gated) else 1
 
 
 if __name__ == "__main__":

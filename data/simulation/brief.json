@@ -4,7 +4,7 @@
     "rounds_sha256": "3f76a7d792ad7e3d",
     "scenario_dir": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis",
     "scenario_file": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis\\reference_data.json",
-    "scenario_sha256": "3fe1fbf8c74f726c",
+    "scenario_sha256": "9f14e8578aa4bd45",
     "command": "python -m weiran.brief"
   },
   "meta": {

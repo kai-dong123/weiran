@@ -44,6 +44,7 @@ from .perception import (
     KnowledgeError,
     active_phase_by_round,
     inject_round_context,
+    knowledge_cutoff_by_round,
     install_injection,
     load_knowledge,
     load_phases,
@@ -633,6 +634,10 @@ async def _run(
     # 这是对的：它在制造事件，不需要被告知态势。免得日后被当成 bug。
     schedule: dict[int, tuple] = {}
     phase_by_round: dict[int, str] = {}
+    #: 轮号 -> 「已知可以到第几天」。`--no-phases` 时恒为 0：连删帖通知这个
+    #: 事件都不注入，agent 当然不该知道它 —— 事实集合与事件集合必须同步，
+    #: 否则「只关事件不关事实」会造出一个场景里根本没发生过的知情。
+    knowledge_cutoff: dict[int, float] = {}
     dpr, compressed = 1.0, False
     if phases_on and scenario_dir is not None and rounds < 2:
         # 1 轮没法把 5 个阶段映射上去（至少需要「起点 + 一个后续」）。
@@ -646,6 +651,11 @@ async def _run(
         schedule, dpr, compressed = phase_schedule(phase_list, rounds)
         # 每一轮归属到「当时生效的最近一个阶段」，只用于给引擎识别出的事件打标签。
         phase_by_round = active_phase_by_round(phase_list, rounds, dpr)
+        # 知情范围也要按轮裁：第 0 轮不该知道 P3 才下发的删帖通知。
+        # 只关掉 --phases 而没有这一条时，agent 会拿到「阶段事件不注入、
+        # 但相关事实已经知道」的组合 —— 比两者都开更古怪。
+        knowledge_cutoff = knowledge_cutoff_by_round(
+            phase_list, rounds, dpr, schedule)
 
     if compressed:
         # 压缩**不是「精度低一点」**：弛豫项 `exp(-k·dt)` 可以复合，但激励项
@@ -717,7 +727,9 @@ async def _run(
         if agents_list:
             blocks = inject_round_context(
                 agents_list, round_index=i, state=cur_state, prev=prev_state,
-                knowledge=knowledge, feedback=feedback_on,
+                knowledge=knowledge,
+                known_upto_day=knowledge_cutoff.get(i, 0.0),
+                feedback=feedback_on,
                 knowledge_on=knowledge_on,
             )
             nonempty = {k: v for k, v in blocks.items() if v}

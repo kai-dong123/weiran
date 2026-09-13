@@ -22,7 +22,7 @@
 - 仅 3 个 agent —— 每轮只有 3~4 条行为，声势项 `tanh(n/8)` 只到半饱和，所有数值都是小规模敏感性测试
 - 4 个窗口与其他窗口共处同一轮 —— 干预相同、分叉点相同，因此数值必然重复，**不可单独归因**
 
-来源指纹：`twitter_rounds.json` sha256:3f76a7d792ad7e3d ± `reference_data.json` sha256:3fe1fbf8c74f726c
+来源指纹：`twitter_rounds.json` sha256:3f76a7d792ad7e3d ± `reference_data.json` sha256:9f14e8578aa4bd45
 
 ## 【一】决策窗口对照
 

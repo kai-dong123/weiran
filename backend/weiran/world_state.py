@@ -278,10 +278,9 @@ class RoundResult:
     events: list[DetectedEvent] = field(default_factory=list)
 
     def deltas(self) -> dict[str, float]:
-        return {
-            d: self.state_after.values[d] - self.state_before.values[d]
-            for d in DIMENSIONS
-        }
+        # 调 delta_from 而不是重抄一遍公式：两处各写一遍，早晚会有一处改了
+        # 另一处没改。此前这里确实是抄的，`delta_from` 因此成了死代码。
+        return self.state_after.delta_from(self.state_before)
 
 
 # ---------------------------------------------------------------------------

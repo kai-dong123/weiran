@@ -17,8 +17,10 @@ README 承诺三件事：重放舆论演化、逐轮追踪六维状态、**并�
     在此之前**全仓零引用**；
   - `perception.Phase.label`（作者手写的「引爆／口径质疑／删帖争议／
     外部介入／收束」）读进了对象但没人用；
-  - `WorldState.delta_from()`、`RoundResult.deltas()`、`CallStats.summary()`
-    是完全没人调用的死代码。
+  - `RoundResult.deltas()`、`CallStats.summary()` 是完全没人调用的死代码
+    （`WorldState.delta_from()` 也在其列 —— `deltas()` 当时是**把它的公式
+    重抄了一遍**而不是调它，所以两者都死。现在 `deltas()` 改为调用它，
+    一行同时消掉了死代码与公式重复：这种重复迟早会有一处改了另一处没改）。
 
 ## 三件它**不**做的事
 

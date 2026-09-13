@@ -116,24 +116,51 @@ def render_state(state: dict[str, float],
     return "；".join(parts)
 
 
-def render_knowledge(entry: "ActorKnowledge") -> str:
+def _due(
+    texts: tuple[str, ...], days: tuple[float, ...], known_upto_day: float | None
+) -> tuple[str, ...]:
+    """按到期日裁掉「此刻还不该知道」的事实。
+
+    `known_upto_day is None` 表示不过滤（不传就不过滤是刻意的默认值，
+    好让 `render_knowledge` 的旧调用点行为不变）；`days` 为空表示这批
+    事实没有阶段信息，同样不过滤。两者的区别写在 `ActorKnowledge` 上。
+    """
+    if known_upto_day is None or not days:
+        return texts
+    if len(days) != len(texts):
+        raise KnowledgeError(
+            f"知情事实与到期日长度不一致（{len(texts)} vs {len(days)}）——"
+            "两者由 load_knowledge 一起构造，对不上说明构造处有缺陷"
+        )
+    return tuple(t for t, d in zip(texts, days) if d <= known_upto_day)
+
+
+def render_knowledge(
+    entry: "ActorKnowledge", *, known_upto_day: float | None = None
+) -> str:
     """「你已知晓」+「你知道但暂未公开」两段。**不含任何数值之外的判断。**
 
     第二段的措辞刻意点出「说出它可能有代价」，但不指示怎么办 ——
     取舍留给 agent。这是 `metric_notes.role_conflict` 想要的落差能在
     文本层被表达出来的前提（指标本身仍只能从仿真产出里读，见模块 docstring）。
+
+    `known_upto_day` 给出后，尚未到期的阶段事实不会被列出。**「未列出的，
+    你并不知道」这句话因此才是真的** —— 在第一版里它是假的：正文这样写，
+    而实际列出的含 P3/P4 的事实。
     """
+    knows = _due(entry.knows, entry.knows_days, known_upto_day)
+    hidden = _due(entry.hidden, entry.hidden_days, known_upto_day)
     segs: list[str] = []
-    if entry.knows:
+    if knows:
         segs.append(
             "你已知晓的事实（未列出的，你并不知道）：\n"
-            + "\n".join(f"- {t}" for t in entry.knows)
+            + "\n".join(f"- {t}" for t in knows)
         )
-    if entry.hidden:
+    if hidden:
         segs.append(
             "你知道、但尚未公开的事实（说出它们可能给你带来麻烦，"
             "公开还是回避由你自己决定）：\n"
-            + "\n".join(f"- {t}" for t in entry.hidden)
+            + "\n".join(f"- {t}" for t in hidden)
         )
     return "\n\n".join(segs)
 
@@ -144,12 +171,14 @@ def build_block(
     prev: dict[str, float] | None = None,
     entry: "ActorKnowledge | None" = None,
     *,
+    known_upto_day: float | None = None,
     feedback: bool = True,
     knowledge: bool = True,
 ) -> str:
     """合成递给某个 agent 的注入块。空串表示本轮不注入。
 
     Args:
+        known_upto_day: 已知可以到第几天。见 `render_knowledge`。
         feedback: 关掉则不带态势（消融对照用）。
         knowledge: 关掉则不带知情范围（消融对照用）。
     """
@@ -158,7 +187,7 @@ def build_block(
         head = f"[第 {round_index} 轮开始时的校园舆情态势]"
         segs.append(f"{head}\n{render_state(state, prev)}")
     if knowledge and entry is not None:
-        seg = render_knowledge(entry)
+        seg = render_knowledge(entry, known_upto_day=known_upto_day)
         if seg:
             segs.append(seg)
     text = "\n\n".join(segs)
@@ -176,7 +205,18 @@ def build_block(
 
 @dataclass(frozen=True)
 class ActorKnowledge:
-    """一个角色的知情范围。事实已由 id 还原成正文。"""
+    """一个角色的知情范围。事实已由 id 还原成正文。
+
+    `knows_days` / `hidden_days` 与 `knows` / `hidden` **逐位对应**，记的是
+    该条事实「到第几天才算已知」。`0.0` = 背景事实，从第 0 轮起就已知。
+
+    **为什么必须有它。** 第一版把 `knows` 每轮原样注入，于是 8 个角色在
+    第 0 轮（P1 引爆当天）就被告知了 P3 才发生的删帖通知、P4 才发生的
+    自媒体转载 —— 这与 README 里「事实按角色**逐轮**注入」的说法相反。
+    阶段事件的注入本身是按轮映射的，**只有知情范围没有**，而这个差别
+    没有任何地方会报出来。现在按金标 `facts[].phase` 打标、按轮裁掉
+    尚未到期的事实。
+    """
 
     actor_id: str
     user_id: int
@@ -184,6 +224,11 @@ class ActorKnowledge:
     group: str
     knows: tuple[str, ...] = ()
     hidden: tuple[str, ...] = ()
+    #: 与 `knows` 逐位对应。**空元组表示「无阶段信息」**（测试里手工构造的
+    #: 合成条目），此时一律视为已知 —— 过滤的前提是知道每条事实的到期日，
+    #: 没有到期日就无从过滤，而不是「默认全部泄给 agent」。
+    knows_days: tuple[float, ...] = ()
+    hidden_days: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -195,6 +240,9 @@ class Knowledge:
     #: `social_agent_id` == CSV 行号 == `user_id`（profiles.py 写盘时按行序），
     #: 而 `agent.user_info.user_name` 是 `None`、`agent.agent_id` 是 uuid4。
     by_user_id: dict[int, str] = field(default_factory=dict)
+    #: 阶段 id -> 该阶段在第几天。`knowledge_cutoff_by_round` 用它把
+    #: 「这一轮处在哪个阶段」换算成「已知可以到第几天」。
+    phase_day: dict[str, float] = field(default_factory=dict)
 
 
 def load_knowledge(out_dir: str | Path, scenario_dir: str | Path) -> Knowledge:
@@ -223,27 +271,55 @@ def load_knowledge(out_dir: str | Path, scenario_dir: str | Path) -> Knowledge:
     fact_text = {f["id"]: f["text"] for f in raw_r.get("facts", [])}
     actors_raw = raw_k.get("actors", {})
 
+    # 事实 -> 到期日。**只有带 `phase` 标签的事实才有到期日**，其余（背景
+    # 事实、口径、人物顾虑）从第 0 轮起已知。标签必须指向真实存在的阶段：
+    # 写错一个字母会让那条事实永不注入，而没有任何地方会提示。
+    # 金标里阶段的主键是 `id`（`load_phases` 读的也是它），不是 `phase_id`。
+    phase_day = {p["id"]: float(p["day"]) for p in raw_r.get("phases", [])}
+    fact_day: dict[str, float] = {}
+    bad_phase: list[str] = []
+    for f in raw_r.get("facts", []):
+        ph = f.get("phase")
+        if not ph:
+            continue
+        if ph not in phase_day:
+            bad_phase.append(f"{f['id']} -> {ph!r}")
+            continue
+        fact_day[f["id"]] = phase_day[ph]
+    if bad_phase:
+        raise KnowledgeError(
+            "以下事实的 phase 标签指向不存在的阶段：\n  "
+            + "\n  ".join(sorted(bad_phase))
+            + "\n已知阶段：" + ", ".join(sorted(phase_day))
+        )
+
     by_actor: dict[str, ActorKnowledge] = {}
     by_user_id: dict[int, str] = {}
     dangling: list[str] = []
 
     for actor_id, v in actors_raw.items():
-        def _texts(ids: list[str]) -> tuple[str, ...]:
-            out = []
+        def _facts(ids: list[str]) -> tuple[tuple[str, ...], tuple[float, ...]]:
+            texts, days = [], []
             for fid in ids:
                 if fid not in fact_text:
                     dangling.append(f"{actor_id}.{fid}")
                     continue
-                out.append(fact_text[fid])
-            return tuple(out)
+                texts.append(fact_text[fid])
+                # 无标签 = 背景事实 = 第 0 轮起已知，不是「永不注入」。
+                days.append(fact_day.get(fid, 0.0))
+            return tuple(texts), tuple(days)
 
+        knows, knows_days = _facts(list(v.get("knows", [])))
+        hidden, hidden_days = _facts(list(v.get("hidden", [])))
         entry = ActorKnowledge(
             actor_id=actor_id,
             user_id=int(v["user_id"]),
             name=str(v.get("name", "")),
             group=str(v.get("group", "")),
-            knows=_texts(list(v.get("knows", []))),
-            hidden=_texts(list(v.get("hidden", []))),
+            knows=knows,
+            hidden=hidden,
+            knows_days=knows_days,
+            hidden_days=hidden_days,
         )
         by_actor[actor_id] = entry
         by_user_id[entry.user_id] = actor_id
@@ -257,7 +333,8 @@ def load_knowledge(out_dir: str | Path, scenario_dir: str | Path) -> Knowledge:
     if not by_actor:
         raise KnowledgeError(f"{k_path} 里一个角色都没有 —— 文件被写空了？")
 
-    return Knowledge(by_actor=by_actor, by_user_id=by_user_id)
+    return Knowledge(by_actor=by_actor, by_user_id=by_user_id,
+                     phase_day=phase_day)
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +452,42 @@ def active_phase_by_round(
     return out
 
 
+def knowledge_cutoff_by_round(
+    phases: list[Phase],
+    rounds: int,
+    dpr: float,
+    schedule: dict[int, tuple[Phase, ...]],
+) -> dict[int, float]:
+    """每一轮「已知可以到第几天」，喂给 `inject_round_context(known_upto_day=...)`。
+
+    取两个来源的上界，缺一不可：
+
+      - `active_phase_by_round` —— 这一轮**处在**哪个阶段（每轮都有）；
+      - `schedule` 里本轮**注入**的那些阶段 —— 事件已经进了时间线，
+        相关事实此刻必须是已知的，否则会出现「帖子里写着删帖通知、
+        而辅导员说不知道有这回事」。
+
+    第二条在轮=天时是冗余的（`active_phase_by_round` 已经覆盖），
+    **压缩模式下才起作用**：3 轮覆盖 14 天时 `active_phase_by_round`
+    给的是 {0: P1, 1: P3, 2: P5} —— P2 与 P4 被跳过，而第 1 轮注入的
+    恰恰是「P3,P4」。只按第一条算，F11（P4 的自媒体转载）会拖到第 2 轮
+    才到期，比它实际进入时间线晚一整轮。
+
+    返回**单调不减**的序列：知情范围只能扩大。这不是自然结果而是刻意
+    求上界的结果 —— 逐轮取 max 而不是直接取本轮值。
+    """
+    day_of = {p.phase_id: float(p.day) for p in phases}
+    in_phase = active_phase_by_round(phases, rounds, dpr)
+    out: dict[int, float] = {}
+    seen = 0.0
+    for r in range(rounds):
+        seen = max(seen, day_of.get(in_phase.get(r, ""), 0.0))
+        for ph in schedule.get(r, ()):
+            seen = max(seen, float(ph.day))
+        out[r] = seen
+    return out
+
+
 # ---------------------------------------------------------------------------
 # 注入（唯一需要 OASIS 的部分，全部惰性导入 —— 好让本模块能离线被测试）
 # ---------------------------------------------------------------------------
@@ -444,6 +557,7 @@ def inject_round_context(
     state: dict[str, float],
     prev: dict[str, float] | None,
     knowledge: Knowledge | None,
+    known_upto_day: float,
     feedback: bool = True,
     knowledge_on: bool = True,
 ) -> dict[str, str]:
@@ -451,6 +565,11 @@ def inject_round_context(
 
     **必须在 `await env.step(...)` 之前调用** —— `env.step` 内部
     `asyncio.gather` 一发起就会读这些属性。
+
+    `known_upto_day` 是**必填**的，不给默认值：它的默认值一旦是
+    「不过滤」，忘记传就等于把所有后期事实泄给第 0 轮，而且没有任何
+    地方会报出来 —— 这正是这个参数被加上来要修的那个缺陷。
+    算法见 `knowledge_cutoff_by_round`。
 
     Returns:
         {actor_id: 注入块}。空块也在里面（值 ""），好让调用方能把
@@ -473,6 +592,7 @@ def inject_round_context(
         entry = knowledge.by_actor[actor_id] if actor_id else None
         block = build_block(
             round_index, state, prev, entry,
+            known_upto_day=known_upto_day,
             feedback=feedback, knowledge=knowledge_on,
         )
         setattr(agent, INJECT_ATTR, block)
