@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weiran"
+version = "0.1.0"
+description = "「未然」—— 校园舆情推演与决策辅助系统"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-only" }
+
+# 只列核心运行时依赖。仿真内核（camel-oasis / camel-ai）版本锁死，
+# 单独放在 requirements.txt 里，避免在这个文件里被无意升级。
+dependencies = [
+    "requests>=2.31",
+    "numpy>=1.26",
+    "Flask>=3.0",
+]
+
+# 源码在 backend/ 下，而包名是 weiran —— 这个映射让
+# `pip install -e .` 之后可以从任意目录 `python -m weiran.scenario`。
+# 不装也能用，但必须先 `cd backend`（见 README）。
+[tool.setuptools]
+package-dir = { "" = "backend" }
+
+[tool.setuptools.packages.find]
+where = ["backend"]

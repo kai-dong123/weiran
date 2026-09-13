@@ -1,0 +1,10 @@
+# 统一行尾，避免 Windows / Linux 之间产生无意义的整文件 diff。
+# 对「可复现」这件事来说，diff 干净是有意义的——评阅者能看清真实改动。
+* text=auto eol=lf
+
+# 二进制，不做行尾转换
+*.db    binary
+*.png   binary
+*.jpg   binary
+*.mp4   binary
+*.pdf   binary
