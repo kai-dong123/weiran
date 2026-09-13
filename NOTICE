@@ -1,0 +1,13 @@
+「未然」—— 校园舆情推演与决策辅助系统
+========================================
+
+本项目基于开源项目 MiroFish 进行二次开发。
+
+上游项目：MiroFish
+仓库地址：https://github.com/666ghj/MiroFish
+上游版本：39d849138ef254f6c737ab4c4705e5545dbe31d4
+上游许可证：GNU Affero General Public License v3.0 (AGPL-3.0)
+
+本项目的修改内容与自研边界，详见 docs/开源及第三方资源使用清单.md。
+
+依据 AGPL-3.0 第 5 条，本项目同样以 AGPL-3.0 发布，完整许可证文本见 LICENSE。

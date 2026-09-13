@@ -1,0 +1,34 @@
+# ---- 环境与密钥（绝不入库）----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# ---- Node ----
+node_modules/
+dist/
+.vite/
+
+# ---- 运行时产物（可重建，不入库）----
+data/runs/
+data/*.db
+*.log
+
+# ---- 但固定样本必须入库（可复现性的前提）----
+!benchmark/fixtures/
+!benchmark/fixtures/**
+
+# ---- 编辑器 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
