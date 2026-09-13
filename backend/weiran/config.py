@@ -55,6 +55,11 @@ class LLMConfig:
     base_url: str
     model: str
     timeout: float = 120.0
+    # 是否发送 `thinking` 参数以控制推理开关。实测本项目所用端点（DeepSeek）
+    # 支持该参数，且**只有这个参数真的能关掉推理**（见 llm.py 模块注释）。
+    # 但并非所有 OpenAI 兼容端点都认识它，不认识会直接 400 ——
+    # 换端点时若报 400，在 .env 里设 LLM_SEND_THINKING_PARAM=0。
+    send_thinking_param: bool = True
 
     @property
     def endpoint(self) -> str:
@@ -154,6 +159,16 @@ def load_config(*, require_llm: bool = True, require_embedding: bool = False) ->
         except ValueError as exc:
             raise ConfigError(f"{name} 必须是整数，当前值 {raw!r}") from exc
 
+    def _bool(name: str, default: bool) -> bool:
+        raw = os.environ.get(name, "").strip().lower()
+        if not raw:
+            return default
+        if raw in ("1", "true", "yes", "on"):
+            return True
+        if raw in ("0", "false", "no", "off"):
+            return False
+        raise ConfigError(f"{name} 必须是布尔值（1/0/true/false），当前值 {raw!r}")
+
     llm_base = os.environ.get("LLM_BASE_URL", "").strip()
     if require_llm and not llm_base:
         raise ConfigError(
@@ -164,7 +179,12 @@ def load_config(*, require_llm: bool = True, require_embedding: bool = False) ->
     emb_base = os.environ.get("EMBEDDING_BASE_URL", "").strip() or llm_base
 
     return Config(
-        llm=LLMConfig(api_key=llm_key, base_url=llm_base, model=llm_model),
+        llm=LLMConfig(
+            api_key=llm_key,
+            base_url=llm_base,
+            model=llm_model,
+            send_thinking_param=_bool("LLM_SEND_THINKING_PARAM", True),
+        ),
         embedding=EmbeddingConfig(api_key=emb_key, base_url=emb_base, model=emb_model),
         simulation=SimulationConfig(
             max_rounds=_int("OASIS_DEFAULT_MAX_ROUNDS", 10),
