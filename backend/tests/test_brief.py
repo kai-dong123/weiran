@@ -615,10 +615,16 @@ def test_load_gold_strips_reference_shape():
 # ---------------------------------------------------------------------------
 
 def test_real_run_smoke():
-    """仓库里那份真实付费产出必须读得进、跑得通、五种窗口都算得出分支。
+    """仓库里那份真实付费产出必须读得进、跑得通、五个窗口都算得出分支。
 
     **只断言结构，不断言数值** —— 数值由 brief.json 自己记录，
     在测试里再抄一份就多了一个会过期的真相来源。
+
+    **同样不能断言「它是压缩的」**：第一版把 `compressed is True` 与
+    `days_per_round == 7.0` 写死在这里，那是照着当时那份 3 轮产出抄的。
+    仓库换成 15 轮（轮 = 天）的产出之后，测试立刻红了 —— 但红的原因是
+    测试绑死了一份会变的产出，不是代码坏了。所以现在改成**从产出自身推导**：
+    它声称什么，渲染出来的就必须与之一致。
     """
     path = SIM / "twitter_rounds.json"
     if not path.is_file():
@@ -633,10 +639,19 @@ def test_real_run_smoke():
     assert all(r["branch_a"] is not None for r in b["windows"]), "有窗口没算出分支"
     md = B.render_markdown(b)
     assert B.check_brief(b, md) == [], B.check_brief(b, md)
-    # 该产出是压缩的（3 轮 / 15 天），必须自报
-    assert b["meta"]["compressed"] is True
-    assert B.MARKERS["compressed"] in md
-    assert b["days_per_round"] == 7.0
+
+    # 自称与实际必须一致 —— **两个方向都测**，只测一个方向的话，
+    # 「非压缩产出却印着压缩声明」这种错就漏掉了（那是真实发生过的缺陷）。
+    if b["meta"]["compressed"]:
+        assert B.MARKERS["compressed"] in md, "自称压缩，正文却没有压缩标记"
+        assert "本轮运行是压缩的" in md, "自称压缩，时点偏差那句却没说是压缩的"
+    else:
+        assert B.MARKERS["compressed"] not in md, \
+            "非压缩产出（轮 = 天）却印着压缩标记 —— 正文在自我否认"
+        assert "本轮运行是压缩的" not in md, \
+            "非压缩产出却印着「本轮运行是压缩的」—— 这一句曾经是写死的"
+    # 「轮 = 天」时 `comparable_to_round_day` 必须为真，两者不能各说各话
+    assert b["meta"]["comparable_to_round_day"] == (not b["meta"]["compressed"])
 
 
 def test_real_run_output_is_current():

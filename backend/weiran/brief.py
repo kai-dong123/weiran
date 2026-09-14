@@ -51,7 +51,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import REPO_ROOT, ensure_console_encoding
-from .perception import Phase
+from .perception import Phase, active_phase_by_round
 from .profiles import DEFAULT_SCENARIO
 from .world_state import (
     DIMENSIONS,
@@ -215,6 +215,26 @@ def phase_ids_of(round_entry: dict) -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
+def resolve_phase_label(i: int, round_entry: dict,
+                        phase_by_round: dict[int, str]) -> str:
+    """这一轮该标哪个阶段。
+
+    **这是两个不同的问句**（`simulate.py` 里那段注释说的是同一件事）：
+      - `round_entry["phase_id"]`：这一轮**注入**了哪个阶段的事件（只有少数轮有）
+      - `phase_by_round[i]`：这一轮**处在**哪个阶段（每一轮都有）
+
+    优先用注入的那个 —— 实跑时引擎标的就是它；没有才回落到「处于」。
+
+    **回落到 `f"R{i}"` 是错的**（这里以前就是这么写的）：那等于把轮号当阶段名
+    填进「阶段」列，简报里于是出现 `| R1 | R1 |` 这种行；而同一份缺失在逐轮小节
+    里被渲染成 `—`，同一件事两套说法。轮号是**编出来**的标签，宁可空着。
+
+    空串表示「无法判定」，由渲染层统一显示成 `—`。
+    """
+    injected = phase_ids_of(round_entry)
+    return injected[0] if injected else phase_by_round.get(i, "")
+
+
 def window_rounds(rounds: list[dict], windows: list[dict]) -> dict[str, list[int]]:
     """窗口阶段 -> 含该阶段的轮号列表。空列表 = **本次运行未覆盖**。"""
     out: dict[str, list[int]] = {}
@@ -224,18 +244,23 @@ def window_rounds(rounds: list[dict], windows: list[dict]) -> dict[str, list[int
     return out
 
 
-def replay(engine: WorldStateEngine, rounds: list[dict], dpr: float) -> list:
+def replay(engine: WorldStateEngine, rounds: list[dict], dpr: float,
+           phase_by_round: dict[int, str] | None = None) -> list:
     """按 `behaviors` 重放整段，拿回 `RoundResult`。
 
     **为什么不直接从 JSON 相邻两轮相减**：JSON 只存 4 位小数，而且拿不到
     `events` 与激励／弛豫／耦合三个分量。重放拿得到全部，代价是要验证
     「重放确实复现了记录」（见 `replay_deviation`）。
+
+    `phase_by_round` 只影响标签，不影响任何数值 —— 阶段名不参与激励、弛豫
+    与耦合的计算。所以补上它不会让 `replay_deviation` 变化。
     """
+    pbr = phase_by_round or {}
     cur = WorldState.baseline(engine.params)
     out = []
     for i, rd in enumerate(rounds):
         res = engine.step(cur, rd.get("behaviors", []), dt=dpr,
-                          phase_id=rd.get("phase_id") or f"R{i}")
+                          phase_id=resolve_phase_label(i, rd, pbr))
         cur = res.state_after
         out.append(res)
     return out
@@ -490,7 +515,12 @@ def build_brief(
             f"金标 {gold.get('_provenance', {}).get('scenario_file', '')} 里"
             f"没有任何阶段（`phases` 为空）—— 决策窗口无从映射，简报无从生成。"
         )
-    results = replay(engine, rounds, dpr)
+    # 「这一轮处在哪个阶段」。产出 JSON 里**只存了注入的那个**（`phase_id`），
+    # 注入只发生在少数轮上，所以多数轮在 JSON 里看不出自己属于哪个阶段。
+    # 从金标阶段表 + `days_per_round` 现算，与实跑时 `simulate.py` 用的是
+    # 同一个 `perception.active_phase_by_round` —— 不是重写一份等价逻辑。
+    phase_by_round = active_phase_by_round(phases, len(rounds), dpr)
+    results = replay(engine, rounds, dpr, phase_by_round)
     rows, coverage = build_windows(rounds, phases, gold.get("decision_windows", []),
                                    engine, dpr, scale=scale)
 
@@ -503,6 +533,10 @@ def build_brief(
         per_round.append({
             "index": i,
             "phase_id": rd.get("phase_id", ""),
+            # 渲染用的阶段标签：注入优先、其次「处于」、都没有才是空（显示成 —）。
+            # 与 `phase_id` 并存而不是替换它 —— 前者回答「这轮处在哪」，
+            # 后者回答「这轮注入了什么」，两个都要能查到。
+            "phase_label": resolve_phase_label(i, rd, phase_by_round),
             "behaviors": behaviors,
             "behavior_counts": counts,
             "state": {d: round(res.state_after[d], 4) for d in DIMENSIONS},
@@ -732,8 +766,20 @@ def render_markdown(brief: dict) -> str:
       "不能拿产出文件的终值当「实际」——那是从基线分叉出来的另一条路，"
       "与被比较的分支不同源。")
     w("")
-    w("「时点偏差」= 本运行里分叉的那一天 − 金标里该阶段的第几天。"
-      "本轮运行是压缩的，所以这个偏差最大到 2 天 —— 全程只有 14 天。")
+    # **这句以前是写死的**：「本轮运行是压缩的，所以这个偏差最大到 2 天 ——
+    # 全程只有 14 天」。跑出第一份非压缩产出（`--rounds 15`）之后，同一句话
+    # 就在一份 `compressed=false` 的简报里声称自己压缩过。降级项那一节是按
+    # `meta` 动态渲染的，这里却写死 —— 同一份简报里两处互相打脸。
+    if brief["meta"].get("compressed"):
+        _dpr = float(brief["meta"].get("days_per_round", 1.0))
+        _n = brief["meta"].get("rounds", len(brief.get("per_round", [])))
+        w("「时点偏差」= 本运行里分叉的那一天 − 金标里该阶段的第几天。"
+          f"本轮运行是压缩的（每轮代表 {_dpr:.2f} 天、共 {_n} 轮），"
+          "所以这个偏差可以不为零。")
+    else:
+        w("「时点偏差」= 本运行里分叉的那一天 − 金标里该阶段的第几天。"
+          "本轮是「轮 = 天」，两者**应当恒等** —— 任何一行不为零都说明阶段"
+          "映射有误，是缺陷而不是误差。")
     w("")
     if brief["coverage"]["n_shared"]:
         w("> **标着「同轮」的行，数字相同是必然的，不是巧合也不可单独归因。** "
@@ -801,7 +847,7 @@ def render_markdown(brief: dict) -> str:
     for r in brief["rounds"]:
         beh = "、".join(f"{k}×{v}" for k, v in r["behavior_counts"].items()) or "（无）"
         ev = "、".join(f"`{e['kind']}`" for e in r["events"]) or "无"
-        w(f"### R{r['index']}　阶段 {r['phase_id'] or '—'}")
+        w(f"### R{r['index']}　阶段 {r.get('phase_label') or '—'}")
         w("")
         w(f"- 行为构成：{beh}")
         w(f"- 六维：" + "　".join(
