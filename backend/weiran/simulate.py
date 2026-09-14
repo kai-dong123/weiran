@@ -124,6 +124,65 @@ class SimulationResult:
 # 我们显式给一个：**这个值同时是两个东西**，见 build_model 的说明。
 DEFAULT_MAX_TOKENS = 16384
 
+# OASIS 的 Twitter 推荐系统用 `Twitter/twhin-bert-base` 算帖文相似度，而
+# `huggingface_hub` 每次 `from_pretrained` 都会**先向 huggingface.co 发一个
+# HEAD 校验请求**（哪怕模型已在本地缓存）。这个请求失败要重试 5 次
+# （退避 1+2+4+8+8s，每次还先等 10s 连接超时）——实测**每轮白等约 127 秒**：
+# 第 1 轮墙钟 134.1s，其中真正花在 LLM 上只有 7.2s。15 轮就是半小时，
+# 录演示视频时每轮卡两分钟。
+#
+# 所以：**缓存已在本地就强制离线**，让 `from_pretrained` 直接读缓存。
+# 缓存不在时**一律不动环境变量并出声** —— 那种情况下联网是唯一出路，
+# 静默改成离线会让它直接抛错，而报错信息里看不出是我们干的。
+TW_HIN_REPO = "Twitter/twhin-bert-base"
+
+
+def hf_cache_dir() -> Path:
+    """按 huggingface_hub 自己的优先级解析缓存根目录。
+
+    **不 import huggingface_hub 来问**：我们必须在它被 import **之前**设好
+    环境变量（它的常量在 import 时求值），去 import 它就本末倒置了。
+    优先级：`HF_HUB_CACHE` > `HF_HOME/hub` > `~/.cache/huggingface/hub`。
+    """
+    if os.environ.get("HF_HUB_CACHE"):
+        return Path(os.environ["HF_HUB_CACHE"])
+    if os.environ.get("HF_HOME"):
+        return Path(os.environ["HF_HOME"]) / "hub"
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def enable_hf_offline_if_cached() -> str:
+    """缓存里已有一份完整的 twhin 就强制 HF 离线；返回一句说明供打印。
+
+    「静默生效」与「静默没生效」在这里都不行：前者会让人把网络问题
+    当成环境问题，后者会让人以为优化生效了其实没有。所以**永远返回一句话**，
+    由调用方打印。
+
+    **必须在任何 oasis / camel / huggingface_hub 的 import 之前调用。**
+    """
+    repo_dir = hf_cache_dir() / f"models--{TW_HIN_REPO.replace('/', '--')}"
+    snapshots_dir = repo_dir / "snapshots"
+    # 要求 tokenizer 与权重**都在**才算完整：只下到一半的缓存，
+    # 强制离线后 from_pretrained 会直接抛错，比联网重试更难查。
+    complete = [
+        s for s in sorted(snapshots_dir.glob("*"))
+        if s.is_dir()
+        and (s / "tokenizer.json").is_file()
+        and (s / "model.safetensors").is_file()
+    ]
+    if not complete:
+        return (f"[HF] 本地无 {TW_HIN_REPO} 缓存（找过 {repo_dir}）——保持联网，"
+                "每轮会先等一次超时重试")
+    already = os.environ.get("HF_HUB_OFFLINE") == "1"
+    # 两个都设：`HF_HUB_OFFLINE` 管 huggingface_hub 自己的 HEAD，
+    # `TRANSFORMERS_OFFLINE` 管 transformers 的 from_pretrained 分支。
+    # 只设前者实测仍会走一次网络路径。
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    if already:
+        return f"[HF] 缓存命中 {TW_HIN_REPO}，调用方已设离线（补齐 TRANSFORMERS_OFFLINE）"
+    return f"[HF] 缓存命中 {TW_HIN_REPO}，已切离线（跳过每轮的联网校验）"
+
 
 def build_model(
     config,
@@ -530,6 +589,11 @@ async def _run(
     temperature: float | None = None,
     seed: int | None = None,
 ) -> SimulationResult:
+    # **必须在 import oasis 之前**：这一句会改环境变量，而 huggingface_hub
+    # 的离线常量在它自己被 import 时求值。放在这里是因为 `_run` 是唯一
+    # 会拉起 oasis 的入口（`main` 也走这里），放 `main` 会漏掉直接调 `_run` 的路径。
+    print(f"  {enable_hf_offline_if_cached()}")
+
     import oasis
     from oasis import ActionType, LLMAction, ManualAction, generate_reddit_agent_graph, generate_twitter_agent_graph
 
