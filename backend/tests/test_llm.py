@@ -77,7 +77,7 @@ class _FakeClient(LLMClient):
     """把 _post 换成假的，并记录送出的 payload。"""
 
     def __init__(self, reply: dict, *, ledger: Ledger | None = None,
-                 send_thinking: bool = True) -> None:
+                 send_thinking: bool = True, seed: int | None = None) -> None:
         super().__init__(
             LLMConfig(
                 api_key="test-key",
@@ -86,6 +86,7 @@ class _FakeClient(LLMClient):
                 send_thinking_param=send_thinking,
             ),
             ledger,
+            seed=seed,
         )
         self.reply = reply
         self.sent: list[dict] = []
@@ -452,6 +453,51 @@ def test_ledger_as_dict_exposes_cache_and_the_recorded_flag():
     assert d["prompt_cache_miss_tokens"] == 100
     empty = Ledger().as_dict()
     assert empty["cache_recorded"] is False, "空账本不该声称端点报过"
+
+
+# -- 采样种子：**默认一个字节都不变** --------------------------------------
+#
+# 这一组是「死旋钮」的反面。`seed` 这个字段不是所有 OpenAI 兼容端点都认，
+# 认不出的会直接 400（同 `thinking` 那一类风险，见 llm.py 里的注释）。
+# 所以它在默认路径上必须**完全不存在**，而不是存在且为 null —— 后者有些
+# 端点也照样报错。下面两条一正一反，缺一条都测不出这件事。
+
+def test_seed_field_is_absent_from_the_payload_by_default():
+    """不传 seed 时，请求体里**连这个键都不该有**。
+
+    不是「值为 null 就行」：`{"seed": null}` 与「没有 seed」对端点不是一回事。
+    """
+    client = _FakeClient(reply=_response("答案"))
+    client.chat([{"role": "user", "content": "你好"}])
+    payload = client.sent[0]
+    assert "seed" not in payload, (
+        f"默认路径的请求体里出现了 seed：{sorted(payload)} —— "
+        "有些端点会因此 400，而这条路径不该有风险")
+
+
+def test_seed_field_is_sent_when_the_client_was_built_with_one():
+    """与上一条配对：给了种子就必须真的发出去，且**不动别的字段**。
+
+    这条同时钉住了「seed 是构造上的、不是每次调用上的」这个决定：只要客户端
+    带种子，`chat` 与 `chat_json` 都会带上，不存在某次调用忘传的漏法。
+    """
+    client = _FakeClient(reply=_response("答案"), seed=7)
+    client.chat([{"role": "user", "content": "你好"}])
+    payload = client.sent[0]
+    assert payload["seed"] == 7, f"种子没发出去：{sorted(payload)}"
+    # 其余字段一个都不许被顺手改掉
+    assert payload["model"] == "test-model"
+    assert payload["temperature"] == 0.7
+    assert payload["messages"] == [{"role": "user", "content": "你好"}]
+
+
+def test_chat_json_carries_the_seed_too():
+    """`chat_json` 是归类器走的那条路，而归类器是引擎的直接输入 ——
+    它要是漏了种子，三条 LLM 路径里就还留一条自由采样的。"""
+    client = _FakeClient(reply=_response('{"labels": []}'), seed=11)
+    client.chat_json([{"role": "user", "content": "分类"}])
+    assert client.sent[0].get("seed") == 11, (
+        "chat_json 没带上种子 —— 归类器那条路又变回无法收窄了")
 
 
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------

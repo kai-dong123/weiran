@@ -288,11 +288,23 @@ class LLMClient:
     Args:
         config: 端点配置。
         ledger: 共用的用量账本；不传则自建一个（可通过 .ledger 取回）。
+        seed: 传给端点的采样种子。**默认 None = 完全不发这个字段**，
+            默认路径的请求体一个字节都不变。
+            它是**这次运行**的属性，不是端点部署的属性，所以放在构造上而不是
+            `.env` 里：一个键只能有一个出处，两处能设就能互相矛盾。
+            也正因为放在构造上，「用带种子的客户端建出来、某次调用却忘了传」
+            这种漏法在本类里不存在 —— 每个 `chat` / `chat_json` 都自动带上。
     """
 
-    def __init__(self, config: LLMConfig, ledger: Ledger | None = None) -> None:
+    def __init__(
+        self,
+        config: LLMConfig,
+        ledger: Ledger | None = None,
+        seed: int | None = None,
+    ) -> None:
         self.config = config
         self.ledger = ledger if ledger is not None else Ledger()
+        self.seed = seed
         self._session = requests.Session()
         # 最近一次的思维链。调试用：答案不对时，第一件事是看它「想了什么」。
         self.last_reasoning: str = ""
@@ -382,6 +394,15 @@ class LLMClient:
         # 换端点若报错，在 .env 里设 LLM_SEND_THINKING_PARAM=0 即可关掉。
         if self.config.send_thinking_param:
             payload["thinking"] = _THINKING_ON if thinking else _THINKING_OFF
+        # 采样种子。**默认不发** —— 与上面 `thinking` 同一类风险：部分 OpenAI
+        # 兼容端点不认这个字段并会 400。区别是这里不给它开 .env 开关，理由是
+        # 它已经有一个更直接的开关：不传 `--seed` 就不会走到这一行。
+        # 换端点若因此报 400，别传 `--seed` 即可。
+        #
+        # 「发了」不等于「端点会遵守」：这一层没有回执可查，所以产出里那句
+        # 限制条件（`stability.SAMPLING_NOTE`）说的是「尽力」而不是「保证」。
+        if self.seed is not None:
+            payload["seed"] = self.seed
 
         started = time.monotonic()
         data = self._post(payload, tag=tag, max_retries=max_retries)

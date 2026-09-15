@@ -61,6 +61,7 @@ from .perception import (
     phase_schedule,
 )
 from .profiles import DEFAULT_SCENARIO
+from .stability import SAMPLING_NOTE, seed_process
 from .stance import StanceClassifier
 from .world_state import DIMENSIONS, WorldState, WorldStateEngine
 
@@ -183,6 +184,14 @@ class SimulationResult:
     # 这个数约等于「写入很快的次数」。撞窗口要数的是另一件事，判据在
     # `_weiran_decay/epsilon_window.py` —— 八支臂上与 400 次数逐一对齐。
     chunking_timestamp_pushed: int = 0
+    # 采样口径。**必须落盘**，而且是本项目唯一一条「N 支臂跑进一个目录之后
+    # 文件里没有任何东西能区分谁是谁」的口子：多 seed 稳定性那套办法建立在
+    # 「知道每次跑的是什么 seed」上，而它此前完全没被记录。
+    # `seed` / `temperature` 是**端点请求字段**（送给 LLM），不是进程 RNG；
+    # 进程 RNG 另有一行，见 `stability.seed_process`。
+    seed: int | None = None
+    temperature: float | None = None
+    random_seeded: bool = False
 
     @property
     def total_actions(self) -> int:
@@ -1036,6 +1045,24 @@ async def _run(
     # 会拉起 oasis 的入口（`main` 也走这里），放 `main` 会漏掉直接调 `_run` 的路径。
     print(f"  {enable_hf_offline_if_cached()}")
 
+    # 进程级 RNG 播种。**必须早于本进程的任何一次抽签**，而第一次抽签不在轮
+    # 循环里：`env.reset()` 建号时就要构造每个 agent 的观察，那条路上就有
+    # `platform.refresh` 的 `random.sample`。所以放在这里，而不是轮循环开头。
+    #
+    # 放在 `_run` 而不是 `main` 的理由，与上面那句 `enable_hf_offline_if_cached`
+    # 完全相同：`_run` 是唯一会拉起 oasis 的入口，放 `main` 会漏掉直接调 `_run`
+    # 的路径（测试、以及将来按 seed 起批次的驱动）。`random` 是标准库，不违反
+    # 上面那条「先切 HF 离线、再碰 camel」的顺序要求。
+    #
+    # **买到的与买不到的，见 `stability.seed_process` 的 docstring。** 一句话：
+    # 它钉住的是 OASIS 那一层抽签，钉不住 LLM 采样，也钉不住 asyncio 的交错。
+    applied = seed_process(seed)
+    if applied["seeded"]:
+        print(f"  采样：进程 RNG 已按 seed={seed} 播种"
+              "（覆盖 OASIS 的 feed 抽签；LLM 采样另计）")
+    # 没传 seed 时不打这行，但**落盘里记着**（`meta.random_seeded=false`）——
+    # 判据要留给汇总器去拒绝，不是靠终端上有没有一句话。
+
     # 上下文压力仪表。**只装 handler，不 import camel**，所以放在这里不违反
     # 上面那条「先切 HF 离线再碰 camel」的顺序要求。
     watch = install_truncation_watch()
@@ -1119,6 +1146,11 @@ async def _run(
     started = time.monotonic()
     result.knowledge_on = knowledge_on
     result.feedback_on = feedback_on
+    # 落盘的口径取自**实际做了什么**，不是取自命令行想要什么。两项都是上面
+    # 那个 `seed_process` 调用的直接结果，不存在「传了 seed 却没播」的中间态。
+    result.seed = seed
+    result.temperature = temperature
+    result.random_seeded = applied["seeded"]
     # `result.phases_on` 在阶段表那段之后才赋值 —— 那里可能会因为轮数不足
     # 把 phases_on 降级成 False，在这里赋值会让落盘的 meta 声称「阶段开着」，
     # 而实际一轮都没注入。落盘口径错了比不落盘更坏。
@@ -1418,6 +1450,72 @@ async def _run(
     return result
 
 
+def build_run_meta(result: SimulationResult, args, *, agents: int) -> dict:
+    """拼出落盘的 `meta`。
+
+    **为什么单独抽成一个函数。** 这段原本内联在 `main()` 里，于是它
+    **一条测试都没有** —— 而 `--seed` / `--temperature` 长期没被记录这件事，
+    正是从这个口子进来的：一个只写不读、又没有测试盯着的字面量，
+    谁都可以往里加键，也谁都可以忘了加。
+
+    `agents` 是**解析后**的取值（命令行优先、否则回落 `.env`），不是
+    `args.agents` —— 后者在回落时是 `None`，记进产出就成了一句假话。
+    """
+    return {
+        "rounds": len(result.rounds),
+        "agents": agents,
+        "platform": args.platform,
+        "seed_text": args.seed_text,
+        "days_per_round": result.days_per_round,
+        "compressed": result.compressed,
+        "comparable_to_round_day": not result.compressed,
+        "phases_on": result.phases_on,
+        "events_from": result.events_from,
+        "knowledge_on": result.knowledge_on,
+        "feedback_on": result.feedback_on,
+        "world_state": not args.no_world_state,
+        "total_seconds": round(result.total_seconds, 2),
+        "total_actions": result.total_actions,
+        # 上下文压力。**这三个数决定「这份结果可不可信」** ——
+        # 截断是静默的，没有它们，一份 agent 已经在失忆的产出
+        # 与一份健康的产出在文件里长得一模一样。
+        "context_limit": result.context_limit,
+        "truncations": result.truncations,
+        "truncation_unparsed": result.truncation_unparsed,
+        "truncation_worst_dropped": result.truncation_worst,
+        # 切片护栏。**这份产出是在哪种口径下跑的，必须落盘** ——
+        # 护栏关掉时记忆会被 camel 切成 1 token 一块、膨胀约 20 倍，
+        # 两条口径的曲线不可混用，而文件里看不出来。
+        "chunking_guard": result.chunking_guard,
+        "chunking_written_whole": result.chunking_written_whole,
+        "chunking_still_sliced": result.chunking_still_sliced,
+        "chunking_timestamp_pushed": result.chunking_timestamp_pushed,
+        # 直调路径（归类器）的账。**这个键缺失 ≠ 它花了 0** ——
+        # 入库那份产出就是旧口径（跑它的时候还没有这个字段），
+        # 所以消费方遇到缺失要显示「未记录」，不是 0。
+        "classifier_ledger": result.classifier_ledger,
+        # 归类器自己的口径（多少条文本、几次调用、多少退回关键词）。
+        # 它决定「行为序列是怎么来的」，与曲线同等重要。
+        "stance_summary": result.stance_summary,
+        # 采样口径。**这一组键是多 seed 稳定性那套办法的地基** ——
+        # N 支臂跑进一个目录之后，没有它们，文件里没有任何东西能
+        # 区分谁是谁，「跨 seed 报均值与方差」就建在不可审计的记录上。
+        #
+        # 三个状态**必须分得开**，别把它们塌成一个：
+        #   键缺失            → 老产出（跑它的时候还没有这一组）
+        #                       → 消费方显示「未记录」
+        #   键在、值是 null   → 新产出、本次**没传** --seed
+        #                       → 消费方显示「未传种子」（不是「未记录」）
+        #   键在、有值        → 真的传了
+        # 「没传」与「老产出没这个键」是两件不同的事：前者是我们
+        # 选择不传，后者是**不知道**。混起来就再也补不回来了。
+        "seed": result.seed,
+        "temperature": result.temperature,
+        "random_seeded": result.random_seeded,
+        "sampling_note": SAMPLING_NOTE,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     from .config import ensure_console_encoding
     ensure_console_encoding()
@@ -1467,7 +1565,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="采样温度。压低能减少跨次抖动，代价是 agent 说话变单调。"
                          "默认不传，用端点默认值")
     ap.add_argument("--seed", type=int, default=None,
-                    help="采样种子。服务端只「尽力」遵守，不保证逐位可复现")
+                    help="采样种子，**同一个数做两件事**：① 作为请求字段送给两个"
+                         "LLM 端点（服务端只「尽力」遵守）；② 给本进程的全局 RNG "
+                         "播种，覆盖 OASIS 决定 agent 看到哪几条帖的抽签。"
+                         "默认不传；不传时产出里记的是「未传种子」而不是「未记录」。"
+                         "**它买到的是「钉住」，不是「可复现」** —— asyncio 的并发"
+                         "交错顺序不是随机数，播种覆盖不到，详见 weiran/stability.py")
     ap.add_argument("--chunking-guard", action="store_true",
                     help="收回 camel 的反超大切片条件：只有「消息自己就超上限」"
                          "才切，其余原样写、交给截断驱逐。**默认关闭** —— 它改的是"
@@ -1517,9 +1620,15 @@ def main(argv: list[str] | None = None) -> int:
     # 账本（见 `llm.LLMClient.__init__`），而没有任何代码会去读它 ——
     # 于是这条路径花掉的钱既不进逐轮记账、也不进产出，只在服务商账单上出现。
     # 这个 bug 曾经真的存在：一个 `LLMClient(config.llm)` 就写完了。
+    #
+    # `--seed` 同时给这一条路：它是三条 LLM 路径里此前唯一完全无法收窄的
+    # （camel 侧的 agent 走 `build_model` 的 `cfg["seed"]`，它走这里）。
+    # **同一个 seed 驱动两处**，所以不存在「一支臂看起来钉住了、其实有一条
+    # 路在自由采样」的中间态。归类器是「文本 → 行为标签」这一步，是引擎的
+    # 直接输入，值得钉。
     classifier_llm = None
     if not args.no_world_state and not args.keyword_stance:
-        classifier_llm = LLMClient(config.llm, Ledger())
+        classifier_llm = LLMClient(config.llm, Ledger(), seed=args.seed)
 
     result = asyncio.run(_run(
         config, out_dir,
@@ -1631,44 +1740,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 # 口径写在文件里，而不是只留在终端上。一份不知道自己是不是
                 # 压缩过的结果，日后必然被当成 round=day 的结果引用。
-                "meta": {
-                    "rounds": len(result.rounds),
-                    "agents": agents,
-                    "platform": args.platform,
-                    "seed_text": args.seed_text,
-                    "days_per_round": result.days_per_round,
-                    "compressed": result.compressed,
-                    "comparable_to_round_day": not result.compressed,
-                    "phases_on": result.phases_on,
-                    "events_from": result.events_from,
-                    "knowledge_on": result.knowledge_on,
-                    "feedback_on": result.feedback_on,
-                    "world_state": not args.no_world_state,
-                    "total_seconds": round(result.total_seconds, 2),
-                    "total_actions": result.total_actions,
-                    # 上下文压力。**这三个数决定「这份结果可不可信」** ——
-                    # 截断是静默的，没有它们，一份 agent 已经在失忆的产出
-                    # 与一份健康的产出在文件里长得一模一样。
-                    "context_limit": result.context_limit,
-                    "truncations": result.truncations,
-                    "truncation_unparsed": result.truncation_unparsed,
-                    "truncation_worst_dropped": result.truncation_worst,
-                    # 切片护栏。**这份产出是在哪种口径下跑的，必须落盘** ——
-                    # 护栏关掉时记忆会被 camel 切成 1 token 一块、膨胀约 20 倍，
-                    # 两条口径的曲线不可混用，而文件里看不出来。
-                    "chunking_guard": result.chunking_guard,
-                    "chunking_written_whole": result.chunking_written_whole,
-                    "chunking_still_sliced": result.chunking_still_sliced,
-                    "chunking_timestamp_pushed":
-                        result.chunking_timestamp_pushed,
-                    # 直调路径（归类器）的账。**这个键缺失 ≠ 它花了 0** ——
-                    # 入库那份产出就是旧口径（跑它的时候还没有这个字段），
-                    # 所以消费方遇到缺失要显示「未记录」，不是 0。
-                    "classifier_ledger": result.classifier_ledger,
-                    # 归类器自己的口径（多少条文本、几次调用、多少退回关键词）。
-                    # 它决定「行为序列是怎么来的」，与曲线同等重要。
-                    "stance_summary": result.stance_summary,
-                },
+                "meta": build_run_meta(result, args, agents=agents),
                 "rounds": [
                     {"index": r.index, "seconds": round(r.seconds, 2),
                      "llm_seconds": r.llm_seconds, "calls": r.calls,

@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import tempfile
@@ -36,8 +37,10 @@ from weiran.simulate import (  # noqa: E402
     TW_HIN_REPO,
     CallStats,
     RoundLog,
+    SimulationResult,
     _cache_delta,
     _round_cache_fields,
+    build_run_meta,
     enable_hf_offline_if_cached,
     hf_cache_dir,
 )
@@ -776,6 +779,73 @@ def test_callstats_cache_line_reports_a_real_ratio():
     line = s.cache_line()
     assert line is not None and "75.0%" in line, f"比例算错：{line}"
     assert "7500" in line and "2500" in line, f"未给原始数：{line}"
+
+
+# -- 采样口径：产出必须记得住自己是怎么跑出来的 ----------------------------
+#
+# 这一组守的是一条**审计缺口**，不是一条功能：`--seed` / `--temperature` 长期
+# 只被送进端点、一个字都没落盘，于是「多 seed 跑 N 次报均值与方差」这句写在
+# 文档与产物里的话，建在一份**不可审计**的记录上 —— N 支臂跑进一个目录之后，
+# 文件里没有任何东西能区分谁是谁。
+#
+# 三个状态**必须分得开**，下面三条一正两反地钉住它们：
+#
+#   键缺失          → 老产出   → 「未记录」（不是 0，也不是「未传种子」）
+#   键在、值 null   → 没传     → 「未传种子」
+#   键在、有值      → 传了     → 那个值
+#
+# 中间那一支最容易塌：`meta.get("seed")` 对「老产出」与「没传」返回的都是
+# None，消费方若只写 `.get()` 就再也分不出来了 —— 而这两件事完全不同，
+# 一件是**我们选择不传**，另一件是**不知道**。
+
+def _meta_for(**result_kw) -> dict:
+    """拼一份 meta。args 只放 `build_run_meta` 真会读的那几个字段。"""
+    args = argparse.Namespace(platform="twitter", seed_text="",
+                              no_world_state=False)
+    return build_run_meta(SimulationResult(**result_kw), args, agents=27)
+
+
+def test_meta_records_the_sampling_caliber():
+    """传了种子就必须真的落在产出里 —— 包括**进程 RNG 播没播**这个独立事实。
+
+    `random_seeded` 与 `seed` 不是一回事：前者说的是本进程的全局 RNG
+    有没有被播种（覆盖 OASIS 的抽签），后者说的是请求里带了什么。
+    两者都由同一次 `seed_process` 调用产生，所以不会互相矛盾。
+    """
+    m = _meta_for(seed=7, temperature=0.6, random_seeded=True)
+    assert m["seed"] == 7, f"种子没落盘：{m.get('seed')!r}"
+    assert m["temperature"] == 0.6, f"温度没落盘：{m.get('temperature')!r}"
+    assert m["random_seeded"] is True, "进程 RNG 播过种却没记"
+    assert m["sampling_note"], "没带上限制条件 —— 产出要自己说清它保证不了什么"
+
+
+def test_meta_distinguishes_not_passed_from_not_recorded():
+    """**这一条是整组的核心。**
+
+    「没传 `--seed`」记成 `null` 并且**键在**；老产出是**键不在**。
+    消费方靠 `"seed" in meta` 分这两支。这条用例把它钉死：
+    新产出即使没传种子，也必须带着这一组键。
+    """
+    m = _meta_for()          # 全新跑的一次、没传 seed
+    for key in ("seed", "temperature", "random_seeded", "sampling_note"):
+        assert key in m, (
+            f"新产出少了 {key!r} 这个键 —— 它会把「本次没传」"
+            "伪装成「老产出、未记录」")
+    assert m["seed"] is None, "没传种子时该记 null（= 未传），不是 0"
+    assert m["temperature"] is None
+    assert m["random_seeded"] is False, "没播种却记成播过"
+
+
+def test_meta_never_claims_a_seed_that_was_not_used():
+    """反向：没传种子时，产出里不许出现任何看起来像种子的数。
+
+    防的是「补个默认值 0 让它别是 None」这种改法 —— 那会把「不知道」
+    写成一个具体的数，而 0 是一个**看起来合法**的种子。
+    """
+    m = _meta_for()
+    assert m["seed"] != 0, "没传种子却记成了 0 —— 0 是一个合法的种子，会被当真"
+    assert m["temperature"] != 0, (
+        "没传温度却记成了 0 —— 而 0 与「不传、用端点默认值」是两回事")
 
 
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
