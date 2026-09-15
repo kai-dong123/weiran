@@ -10,8 +10,9 @@
 # ---- 核心运行时 ----
 # 刻意不引入 openai SDK / python-dotenv：需求各只有十几行，
 # 少一个依赖就少一个「评委装不上」的失败点。见 weiran/llm.py、weiran/config.py 的注释。
-# 同理**不引入 Flask** —— 本项目是 CLI 优先，没有任何 Web 服务，
-# 全仓没有一个文件 import 它。
+# Flask **不在这一组**：展示层（weiran/viewer.py）把它当可选依赖，没装时
+# `import weiran.viewer` 仍然成功，只有真起服务才报「怎么装」并以非零码退出。
+# 核心推演、简报、自检都不需要它 —— 见下方「可选：展示层」。
 requests>=2.31
 numpy>=1.26
 
@@ -25,3 +26,11 @@ camel-ai==0.2.78
 # 这个错误只在「clone 下来装一遍」时出现，开发机上装了旧版就看不到。
 # 实测 1.30.0 可用。**这一行不是保险，是必需品。**
 mcp<2
+
+# ---- 可选：展示层 ----
+# 只有 `python -m weiran.viewer` 需要它。不装也能跑全部推演、简报与自检，
+# 也能直接看 data/simulation/ 下的 brief.md 与 gold_check.md（页面与那两份
+# 文字读的是同一批数）。
+# 不锁死小版本：这一层只用 Flask 最基础的路由与 Response，而 `tests/
+# test_viewer.py` 里有一条测试真的把 flask 挡住、验证缺它时的降级路径。
+flask>=3.0
