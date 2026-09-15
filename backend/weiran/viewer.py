@@ -32,7 +32,7 @@
 **灰置**的、`PLANNED_TRIGGER_ROUTE` 没有任何处理器 —— 接口留在那里，是为了
 让「下一步接什么」看得见，而不是假装已经有了。
 
-    python -m weiran.viewer               # 起服务，默认 127.0.0.1:8000
+    python -m weiran.viewer               # 起服务，地址取 .env（默认 127.0.0.1:8000）
     python -m weiran.viewer --check       # 不起服务，把每个页面渲一遍并自检
 """
 
@@ -46,7 +46,13 @@ import sys
 from pathlib import Path
 
 from .brief import DEFAULT_ROUNDS_FILE
-from .config import REPO_ROOT, ensure_console_encoding
+from .config import (
+    REPO_ROOT,
+    ConfigError,
+    ViewerConfig,
+    ensure_console_encoding,
+    load_config,
+)
 
 DEFAULT_BRIEF = REPO_ROOT / "data" / "simulation" / "brief.json"
 DEFAULT_GOLD = REPO_ROOT / "data" / "simulation" / "gold_check.json"
@@ -839,7 +845,10 @@ def main(argv: list[str] | None = None) -> int:
     ensure_console_encoding()
     ap = argparse.ArgumentParser(
         description="展示层：把已有产物渲染成页面（只读，不触发 LLM）")
-    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--host", default=None,
+                    help="监听地址。只接受回环（默认取 .env 的 FLASK_HOST / 127.0.0.1）")
+    ap.add_argument("--port", type=int, default=None,
+                    help="监听端口（默认取 .env 的 FLASK_PORT / 8000）")
     ap.add_argument("--brief", default=None, help="决策简报 JSON")
     ap.add_argument("--rounds", default=None, help="推演产出 JSON")
     ap.add_argument("--gold", default=None, help="金标对照表 JSON")
@@ -858,6 +867,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         return _check(data)
 
+    # 配置**只在这一条路径上**读。上面 `--check` 刻意不读：它要能在没有
+    # .env、没装 flask 的机器上跑（那正是「我的产物是不是真的」这个问题的
+    # 使用场景，问的人常常是刚 clone 下来的）。
+    # 命令行显式传的值优先于 .env —— 与 `load_config` 里「已存在的环境变量
+    # 不被 .env 覆盖」是同一条取向。两次构造之间会重新过一遍回环校验，
+    # 所以 `--host 0.0.0.0` 绕不过去。
+    try:
+        conf = load_config(require_llm=False).viewer
+        if args.host is not None:
+            conf = ViewerConfig(host=args.host, port=conf.port)
+        if args.port is not None:
+            conf = ViewerConfig(host=conf.host, port=args.port)
+    except ConfigError as exc:
+        print(f"配置有问题：\n{exc}")
+        return 2
+
     app = build_app(data)
     print("「未然」展示层 —— 只读，不触发任何 LLM 调用")
     for k, p in data.paths.items():
@@ -865,11 +890,13 @@ def main(argv: list[str] | None = None) -> int:
               + (f"  sha256:{data.sha[k]}" if data.sha[k] else "  （缺，对应页会显示「显示不了」）"))
     if data.missing:
         print(f"  ⚠ 缺 {'、'.join(data.missing)} —— 页面会说明缺哪一份，不假装有数")
-    print(f"  http://127.0.0.1:{args.port}/")
-    # 只绑本机、绝不开 debug：页面读的是本地文件，debug 的调试器是一个
+    src = ("命令行" if (args.host is not None or args.port is not None)
+           else ".env / 默认值")
+    print(f"  监听 http://{conf.host}:{conf.port}/  （来源：{src}）")
+    # 只绑回环、绝不开 debug：页面读的是本地文件，debug 的调试器是一个
     # 可以在服务端执行代码的面，而这一层不需要它（渲染是纯函数，出错就是
     # Python 回溯，直接在终端看）。
-    app.run(host="127.0.0.1", port=args.port, debug=False)
+    app.run(host=conf.host, port=conf.port, debug=False)
     return 0
 
 

@@ -171,12 +171,57 @@ class SimulationConfig:
     max_agents: int = 30
 
 
+#: 展示层允许绑定的地址。**只此一处定义**：`config.load_config` 与
+#: `viewer.main` 的 `--host` 都要过这一关，两个入口共用一个集合，
+#: 免得「`.env` 里挡住了、命令行又绕过去」。
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+@dataclass(frozen=True)
+class ViewerConfig:
+    """展示层的监听地址。**只准绑回环。**
+
+    `FLASK_HOST` / `FLASK_PORT` 两个键此前与 `OASIS_*` 一样是**死的**：写在
+    `.env` 里、没有任何消费方 —— 设了不生效、不报错、不降级。现在由展示层
+    消费，但两半的处理不一样，理由是这一层的性质：
+
+    - **端口**照读（`FLASK_PORT`）—— 换端口无害。
+    - **地址只接受回环**（`127.0.0.1` / `localhost` / `::1`）。容器或共享
+      机器上，一个 `0.0.0.0` 会把「本地查看工具」变成对局域网开放的只读服务；
+      这一层没有任何鉴权，也没有理由被外部访问。所以非回环值**直接抛**，
+      而不是**静默忽略** —— 静默忽略正是这个项目专门猎杀的那类失效：
+      配置写了、看着生效了、实际没生效。
+
+    校验放在 `__post_init__` 而不是 `load_config` 里，是为了让 `--host`
+    这个命令行入口也过同一道闸：两份代码各查一次，迟早会有一份忘了查。
+    """
+
+    host: str = "127.0.0.1"
+    port: int = 8000
+
+    def __post_init__(self) -> None:
+        if self.host.strip().lower() not in LOOPBACK_HOSTS:
+            raise ConfigError(
+                f"监听地址只能是回环（{' / '.join(LOOPBACK_HOSTS)}），"
+                f"当前值 {self.host!r}。\n"
+                "  来源是 .env 的 FLASK_HOST 或命令行的 --host。\n"
+                "  展示层没有鉴权，绑到外部地址会把「本地查看工具」变成对局域网"
+                "开放的只读服务。\n"
+                "  要给别人看，请让对方在本机跑同一条命令，而不是把这一层暴露出去。"
+            )
+
+    @property
+    def is_loopback(self) -> bool:
+        return self.host.strip().lower() in LOOPBACK_HOSTS
+
+
 @dataclass(frozen=True)
 class Config:
     llm: LLMConfig
     embedding: EmbeddingConfig
     simulation: SimulationConfig
     data_dir: Path
+    viewer: ViewerConfig = ViewerConfig()
 
     @property
     def db_path(self) -> Path:
@@ -255,6 +300,8 @@ def load_config(*, require_llm: bool = True, require_embedding: bool = False) ->
 
     emb_base = os.environ.get("EMBEDDING_BASE_URL", "").strip() or llm_base
 
+    flask_host = os.environ.get("FLASK_HOST", "").strip() or ViewerConfig.host
+
     return Config(
         llm=LLMConfig(
             api_key=llm_key,
@@ -268,4 +315,5 @@ def load_config(*, require_llm: bool = True, require_embedding: bool = False) ->
             max_agents=_int("OASIS_MAX_AGENTS", 30),
         ),
         data_dir=DEFAULT_DATA_DIR,
+        viewer=ViewerConfig(host=flask_host, port=_int("FLASK_PORT", ViewerConfig.port)),
     )

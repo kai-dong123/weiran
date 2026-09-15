@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from weiran import gold_check as G  # noqa: E402
 from weiran.brief import BriefError  # noqa: E402
-from weiran.config import REPO_ROOT  # noqa: E402
+from weiran.config import REPO_ROOT, ensure_console_encoding  # noqa: E402
 
 ROUNDS_FILE = G.DEFAULT_ROUNDS_FILE
 SCENARIO_DIR = REPO_ROOT / G.DEFAULT_SCENARIO
@@ -503,6 +503,12 @@ def test_render_prints_every_row_and_every_reason():
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:
+    # 兜底 runner 也要防这一条：**被测代码会往控制台印符号**（repro_check 印
+    # ✅/❌、viewer 的失败路径印 ❌）。Windows 中文控制台是 GBK，装不下这些
+    # 字符时 print 会抛 UnicodeEncodeError —— 于是「有坏消息要报」的那次运行
+    # 反而崩在报消息的路上，看起来像测试坏了。这正是 config.py 里那个
+    # `ensure_console_encoding()` 存在的理由，这里用上它。
+    ensure_console_encoding()
     tests = [
         (name, obj)
         for name, obj in sorted(globals().items())

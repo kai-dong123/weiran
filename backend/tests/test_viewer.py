@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -33,7 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from weiran import viewer as V  # noqa: E402
-from weiran.config import REPO_ROOT  # noqa: E402
+from weiran.config import REPO_ROOT, ensure_console_encoding  # noqa: E402
 
 PKG = Path(__file__).resolve().parents[1] / "weiran"
 
@@ -80,11 +81,26 @@ def _imports(tree: ast.Module) -> list[tuple[str, bool]]:
 # 1. 可选依赖：只有这一层碰 flask，而且不能是顶层 import
 # ---------------------------------------------------------------------------
 
-def test_flask_is_mentioned_by_exactly_one_module():
-    """全仓只有 `viewer.py` 提到 flask。"""
-    hits = [p.name for p in _sources()
-            if "flask" in p.read_text(encoding="utf-8").lower()]
-    assert hits == ["viewer.py"], f"提到 flask 的模块不止展示层：{hits}"
+def test_only_the_viewer_imports_flask():
+    """全仓只有 `viewer.py` **导入** flask，而且它的导入是延迟的。
+
+    这条原先数的是「哪些文件里出现过 flask 这个词」。那太糙了：`config.py`
+    的注释里写着 `FLASK_HOST`，于是它被数进来，报成「依赖 flask 的模块」。
+    **注释里提到一个词，和真的 import 它，是两回事** —— 被误报的后果是逼着
+    大家别在注释里写键名，而少写一句说明正是本项目最不该有的那种代价。
+    """
+    importing = {}
+    for p in _sources():
+        tops = [top for mod, top in _imports(_tree(p)) if mod == "flask"]
+        if tops:
+            importing[p.name] = tops
+    assert list(importing) == ["viewer.py"], (
+        f"导入 flask 的模块不止展示层：{sorted(importing)}")
+    # 非空转：上面那条在「谁都没导入」时也会通过，而这一层是**可选**依赖，
+    # 本来就该有人导入。位置也一并钉死 —— 延迟导入是设计要求，不是巧合。
+    assert importing["viewer.py"] == [False], (
+        "viewer.py 里 flask 的导入位置不对（应为函数内延迟导入，不在模块顶层）："
+        f"{importing['viewer.py']}")
 
 
 def test_no_module_imports_flask_or_viewer_at_the_top_level():
@@ -363,6 +379,26 @@ def test_check_mode_passes_and_needs_no_flask():
     assert V.main(["--check"]) == 0
 
 
+def test_check_mode_does_not_read_the_config_at_all():
+    """自检路径**不读配置** —— 这是刻意的，不是碰巧。
+
+    读配置意味着自检要求 `.env` 存在、且 `FLASK_HOST` 合法。而「我的产物是
+    不是真的」这个问题的使用场景，正是**刚 clone 下来、还没配 `.env`** 的
+    机器。这里把一个**非法**的 `FLASK_HOST` 放进环境：起服务时它会立刻报错
+    停下（见 `test_config.py`），自检却必须照常返回 0 —— 说明两者走的是
+    两条路。
+    """
+    saved = os.environ.get("FLASK_HOST")
+    os.environ["FLASK_HOST"] = "0.0.0.0"
+    try:
+        assert V.main(["--check"]) == 0, "自检因为一个只与起服务有关的配置项而失败了"
+    finally:
+        if saved is None:
+            os.environ.pop("FLASK_HOST", None)
+        else:
+            os.environ["FLASK_HOST"] = saved
+
+
 def test_check_mode_announces_a_missing_artifact_as_not_measured():
     """缺产物时自检**不能报通过**：那是「没测到」。"""
     with tempfile.TemporaryDirectory() as tmp:
@@ -383,6 +419,12 @@ def test_every_route_has_a_nav_entry():
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:
+    # 兜底 runner 也要防这一条：**被测代码会往控制台印符号**（repro_check 印
+    # ✅/❌、viewer 的失败路径印 ❌）。Windows 中文控制台是 GBK，装不下这些
+    # 字符时 print 会抛 UnicodeEncodeError —— 于是「有坏消息要报」的那次运行
+    # 反而崩在报消息的路上，看起来像测试坏了。这正是 config.py 里那个
+    # `ensure_console_encoding()` 存在的理由，这里用上它。
+    ensure_console_encoding()
     tests = [
         (name, obj)
         for name, obj in sorted(globals().items())

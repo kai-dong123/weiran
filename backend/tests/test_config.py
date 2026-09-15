@@ -39,8 +39,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from weiran.config import (  # noqa: E402
+    LOOPBACK_HOSTS,
+    ConfigError,
+    ViewerConfig,
     ensure_console_encoding,
     ensure_log_handler_encoding,
+    load_config,
 )
 
 # agent 帖文里实测出现过的那个字符（🤍 白心）
@@ -228,9 +232,112 @@ def test_console_encoding_is_safe_to_call():
     ensure_console_encoding()   # 且可重复调用
 
 
+# -- 展示层监听地址：两个键**必须真的有消费方** ----------------------------
+#
+# 这两条守的还是同一类静默失效，换个位置再守一遍：`OASIS_*` 曾经是「写在
+# .env 里、没有任何消费方、设了不生效也不报错」，`FLASK_HOST` / `FLASK_PORT`
+# 有一段时间**一模一样**。第 2 条就是那条缺陷的回归测试 —— 谁把接线删了，
+# 它会红，而不是安静地回到「设了不生效」。
+#
+# 第 1 条守的是接线接错方向的后果：展示层没有鉴权，绑到 0.0.0.0 就把
+# 「本地查看工具」变成对局域网开放的服务。
+
+class _env:
+    """临时设几个环境变量，退出时恢复原状。
+
+    `_load_dotenv` **不覆盖已存在的环境变量**，所以这里设的值一定赢过仓库里
+    那份 `.env` —— 测试不依赖开发机上的 `.env` 长什么样。
+    """
+
+    def __init__(self, **kv):
+        self._kv = kv
+
+    def __enter__(self):
+        self._saved = {k: os.environ.get(k) for k in self._kv}
+        for k, v in self._kv.items():
+            os.environ[k] = v
+        return self
+
+    def __exit__(self, *exc):
+        for k, v in self._saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        return False
+
+
+def test_flask_env_keys_are_actually_consumed():
+    """**这一条就是「死旋钮」的回归测试。**
+
+    守的是：`.env` 里写下 `FLASK_PORT`，`load_config` 读出来，展示层拿到手。
+    少任何一环，这个键就退回到「设了不生效也不报错」—— 那正是本项目专门
+    猎杀、且已经在 `OASIS_*` 上踩过一次的失效。
+    """
+    with _env(FLASK_HOST="localhost", FLASK_PORT="8123"):
+        cfg = load_config(require_llm=False)
+    assert cfg.viewer.port == 8123, (
+        f"FLASK_PORT 没有被消费：读出来是 {cfg.viewer.port} —— "
+        "这个键又变回死的了")
+    assert cfg.viewer.host == "localhost", (
+        f"FLASK_HOST 没有被消费：读出来是 {cfg.viewer.host!r}")
+
+
+def test_flask_port_rejects_non_integer():
+    """坏的端口要立刻停下并说清楚，而不是回落到默认值假装没事。"""
+    with _env(FLASK_PORT="八千"):
+        try:
+            load_config(require_llm=False)
+        except ConfigError as exc:
+            assert "FLASK_PORT" in str(exc), f"报错里没说清是哪个键：{exc}"
+            return
+    raise AssertionError("FLASK_PORT 是「八千」却通过了 —— 这意味着它被静默忽略了")
+
+
+def test_non_loopback_host_is_refused_loudly():
+    """`0.0.0.0` 必须**抛**，不许静默忽略、也不许静默改回默认值。
+
+    静默忽略是这个缺陷的另一半：用户以为自己绑上去了，实际没有 ——
+    或者反过来，以为自己关掉了，实际开着。两种都不可接受。
+    """
+    for bad in ("0.0.0.0", "192.168.1.7", "::"):
+        try:
+            ViewerConfig(host=bad)
+        except ConfigError as exc:
+            assert "回环" in str(exc), f"报错没说清原因：{exc}"
+        else:
+            raise AssertionError(f"{bad!r} 被接受了 —— 展示层会暴露到本机之外")
+
+
+def test_loopback_check_is_an_exact_list_not_a_prefix():
+    """**白名单是精确匹配，不是 `startswith("127.")`。**
+
+    后者看着更宽容，其实是开了个洞：`127.0.0.1.evil.com` 也以 `127.` 开头，
+    而这个域名解析到哪就不由我们决定了。这里把它连同 `localhost` 的变体
+    一起钉住。
+    """
+    for good in LOOPBACK_HOSTS:
+        ViewerConfig(host=good)                  # 不抛即通过
+    ViewerConfig(host="  LOCALHOST  ")           # 大小写与空白先规整，再比对
+
+    # `127.0.0.2` 确实落在回环段，但不在白名单里 —— 刻意的取舍：
+    # 精确匹配比「看起来更全的规则」更难写错。`127.0.0.1.evil.com` 才是
+    # 前缀写法真正的洞：它也以 `127.` 开头，而解析到哪不由我们决定。
+    for bad in ("127.0.0.1.evil.com", "localhost.evil.com", "127.0.0.2"):
+        try:
+            ViewerConfig(host=bad)
+        except ConfigError:
+            continue
+        raise AssertionError(f"{bad!r} 不应被接受")
+
+
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:
+    # 与其余十一套一致：兜底 runner 先设好控制台编码策略。这一套本身就在测
+    # 那个函数，但**被测它与调用它是两件事** —— 少了这一行，
+    # `test_handbook.py` 里那条「每一套的 runner 都要调它」会红。
+    ensure_console_encoding()
     tests = [
         (name, obj)
         for name, obj in sorted(globals().items())

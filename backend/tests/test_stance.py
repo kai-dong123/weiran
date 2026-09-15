@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from weiran.simulate import _SILENT_ACTIONS, texts_from_actions  # noqa: E402
 from weiran.stance import KINDS, PROMPT_VERSION, StanceClassifier, _key  # noqa: E402
 from weiran.world_state import KIND_PRIORITY, classify  # noqa: E402
+from weiran.config import ensure_console_encoding  # noqa: E402
 
 SEED = "【就业指导中心】2025届就业质量报告发布，落实率78.3%。"
 
@@ -294,6 +295,12 @@ def test_short_keywords_are_the_unreliable_ones():
 # 直接执行时的兜底 runner（不依赖 pytest）
 
 def _run() -> int:
+    # 兜底 runner 也要防这一条：**被测代码会往控制台印符号**（repro_check 印
+    # ✅/❌、viewer 的失败路径印 ❌）。Windows 中文控制台是 GBK，装不下这些
+    # 字符时 print 会抛 UnicodeEncodeError —— 于是「有坏消息要报」的那次运行
+    # 反而崩在报消息的路上，看起来像测试坏了。这正是 config.py 里那个
+    # `ensure_console_encoding()` 存在的理由，这里用上它。
+    ensure_console_encoding()
     tests = [
         (name, obj)
         for name, obj in sorted(globals().items())

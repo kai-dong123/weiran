@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from weiran.config import LLMConfig  # noqa: E402
+from weiran.config import LLMConfig, ensure_console_encoding  # noqa: E402
 from weiran.llm import (  # noqa: E402
     Ledger,
     LLMClient,
@@ -457,6 +457,12 @@ def test_ledger_as_dict_exposes_cache_and_the_recorded_flag():
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:
+    # 兜底 runner 也要防这一条：**被测代码会往控制台印符号**（repro_check 印
+    # ✅/❌、viewer 的失败路径印 ❌）。Windows 中文控制台是 GBK，装不下这些
+    # 字符时 print 会抛 UnicodeEncodeError —— 于是「有坏消息要报」的那次运行
+    # 反而崩在报消息的路上，看起来像测试坏了。这正是 config.py 里那个
+    # `ensure_console_encoding()` 存在的理由，这里用上它。
+    ensure_console_encoding()
     tests = [
         (name, obj)
         for name, obj in sorted(globals().items())

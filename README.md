@@ -14,7 +14,11 @@
 > **已定位并修掉切片护栏引入的静默丢回合（`_record_tool_calling` 用 `base + 1e-6`
 > 预留回执位，而写入路径时钟分辨率约 1ms —— 终稿读数落进那 1 微秒窗口就触发端点 400、
 > 该 agent 该轮动作整条丢；修法是让 shim 成为该 agent 时间戳的唯一权威）**；
-> 226 条测试全绿，四层可复现性自检通过）
+> 322 条测试全绿，五层可复现性自检通过）
+
+> **要把它跑起来，看 [`docs/使用手册.md`](docs/使用手册.md)。**
+> 那份手册负责「怎么跑、产出在哪、每个字段怎么读、哪些数不能按字面读」；
+> 这份 README 负责「这是什么、为什么这么做」。两份都不含任何配置项的值。
 
 面对校园突发事件，管理者往往在两难中做决定：公开信息会引发舆情，不公开则损耗信任。
 **「未然」把这场两难提前演练一遍**——用多智能体仿真重放事件的舆论演化，逐轮追踪
@@ -77,18 +81,21 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 226 条，一次跑完（推荐）
+python -m pytest tests/             # 322 条，一次跑完（推荐）
 
-# 九套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
+# 十二套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
 python tests/test_world_state.py    # 23/23
-python tests/test_llm.py            # 19/19
+python tests/test_llm.py            # 30/30
 python tests/test_stance.py         # 26/26
 python tests/test_perception.py     # 49/49
-python tests/test_brief.py          # 49/49
-python tests/test_simulate.py       # 25/25
-python tests/test_config.py         # 8/8
+python tests/test_brief.py          # 55/55
+python tests/test_gold_check.py     # 27/27
+python tests/test_simulate.py       # 33/33
+python tests/test_config.py         # 12/12
 python tests/test_repro_check.py    # 13/13
+python tests/test_viewer.py         # 21/21
+python tests/test_handbook.py       # 19/19
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
 python -m weiran.brief              # 决策简报（读已有产出，不调 LLM）
@@ -105,8 +112,8 @@ python -m weiran.brief              # 决策简报（读已有产出，不调 LL
 > 它是模型输出与**作者手写预期**之间的偏离量，只作诊断用。
 > 把它当准确率，就是给评测注水——脚本开头会再提醒一次。
 
-> **上面九套离线测试证明不了「推演命令发出去能跑通」。** 这一条是被实测撞出来的：
-> `repro_check.py` 的第 3 层一度传了个文件名给 `--out`，那命令必炸，而九套测试全绿
+> **上面那批离线测试证明不了「推演命令发出去能跑通」。** 这一条是被实测撞出来的：
+> `repro_check.py` 的第 3 层一度传了个文件名给 `--out`，那命令必炸，而当时九套测试全绿
 > —— 因为它们测的是参数字符串，不是那条命令真的跑起来。要验这一层，只能真跑：
 >
 > ```bash
@@ -239,18 +246,23 @@ backend/
     validate.py     金标校验（离线重放 + 可机检断言）
     brief.py        决策简报：5 个窗口 × 两条分支未来 + 拐点对照 + 逐轮证据量（不依赖 LLM）
     smoke.py        连通性冒烟（端点 / JSON / 中文 / 推理开关成本）
-  repro_check.py    可复现性分级自检（四层各测一遍；产物写临时运行目录）
+    gold_check.py   金标对照表：金标自己写的 10 条断言逐条核（不依赖 LLM）
+    viewer.py       只读展示层：把已有产物渲成页面（可选依赖 flask，不触发 LLM）
+  repro_check.py    可复现性分级自检（五层各测一遍；产物写临时运行目录）
   tests/
     test_store.py        14 条
     test_world_state.py  23 条
-    test_llm.py          19 条
+    test_llm.py          30 条
     test_stance.py       26 条
     test_perception.py   49 条
-    test_brief.py        49 条
-    test_simulate.py     25 条
-    test_config.py        8 条
+    test_brief.py        55 条
+    test_gold_check.py   27 条
+    test_simulate.py     33 条
+    test_config.py       12 条
     test_repro_check.py  13 条
-    —— 共 226 条，`python -m pytest tests/` 一次跑完
+    test_viewer.py       21 条
+    test_handbook.py     19 条
+    —— 共 322 条，`python -m pytest tests/` 一次跑完
 data/
   simulation/                      推演产出（入库：是「跑得通」的证据）
     twitter_rounds.json            27 agent × 15 轮：逐轮状态、行为、成本、
@@ -311,7 +323,9 @@ docs/
   单次最多丢 1,234,443 token**（换一次运行是 653 次 / 930,238 token）。
   「饱和」是对的，只是饱和的方式是**悄悄截肢 agent 的记忆**，而不是曲线变平——
   而这个项目最防的就是这种不报错的失效。现在它被接成了可机检的事件
-  （`simulate.install_truncation_watch`），逐轮记进产出，简报里出三条分支。
+  （`simulate.install_truncation_watch`），逐轮记进产出，简报里按 `truncated` /
+  `truncation_unparsed` 两条降级项报出来（老产出没这个键时改报
+  `no_context_record`，说的是「没记录」而不是「没截断」）。
 - **「接线通了」不等于「语义对了」**。知情范围那个泄漏是审计没查出来的：
   它核了「谁产出、谁消费、谁接线」，四段全通，于是判为「有产出方」——
   而真实情况是注入每轮原样重复、把 P3/P4 的事实在第 0 轮就告诉了 agent。
