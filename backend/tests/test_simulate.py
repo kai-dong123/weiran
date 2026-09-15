@@ -34,6 +34,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from weiran.simulate import (  # noqa: E402
     TW_HIN_REPO,
+    CallStats,
+    RoundLog,
+    _cache_delta,
+    _round_cache_fields,
     enable_hf_offline_if_cached,
     hf_cache_dir,
 )
@@ -690,6 +694,87 @@ def test_guard_is_off_by_default():
 
     default = inspect.signature(_run).parameters["chunking_guard"].default
     assert default is False, f"切片护栏默认值变成了 {default!r}"
+
+
+# -- 前缀缓存的逐轮归属 ----------------------------------------------------
+#
+# 这一段守的是**「未记录」在产物里的形态**。本项目有两条调用路径，其中直调
+# 那条（归类器）走 requests、不经过 camel 的模型对象，所以逐轮的
+# calls / prompt_tokens 里一个数都不含它 —— 那笔钱只在服务商账单上。
+# 补账的时候最容易犯的错，是把「没记」写成 0：0 是「报了，一次都没命中」的
+# 形态，两者对账单的指向相反，且一旦落盘就再也分不开了。
+
+
+def test_cache_delta_is_none_when_no_call_reported():
+    """本轮没有调用报过这个字段 → None，**不是 (0, 0)**。"""
+    got = _cache_delta(hit=0, miss=0, calls=0,
+                       base_hit=0, base_miss=0, base_calls=0)
+    assert got is None, f"没报却给出了差分：{got}"
+
+
+def test_cache_delta_is_none_when_calls_happened_but_endpoint_stayed_silent():
+    """本轮**调用了**、但端点没报 → 仍是 None。
+
+    这一支是最容易写错的：命中数一点没变，看上去像「本轮全未命中」。
+    但「端点没报」与「报了且全未命中」不是一件事，所以判据取的是
+    「报过的调用次数有没有前进」，不是命中数有没有变。
+    """
+    got = _cache_delta(hit=900, miss=100, calls=1,
+                       base_hit=900, base_miss=100, base_calls=1)
+    assert got is None, f"端点没报却被记成了差分：{got}"
+
+
+def test_cache_delta_zero_zero_is_real_when_endpoint_did_report():
+    """本轮报了、且两端都是 0 → (0, 0)，**而且必须是 (0, 0)**。
+
+    与上一条对读：两个都「什么都没变」，一个是不知道，一个是确知全未命中。
+    只测其中一条的话，把判据写成常数也能过。
+    """
+    got = _cache_delta(hit=500, miss=300, calls=2,
+                       base_hit=500, base_miss=300, base_calls=1)
+    assert got == (0, 0), f"报了全未命中却没落数：{got}"
+
+
+def test_cache_delta_subtracts_the_previous_round():
+    """差分要对上：本轮增量 = 当前累计 − 轮初快照。"""
+    got = _cache_delta(hit=1800, miss=600, calls=3,
+                       base_hit=1400, base_miss=500, base_calls=2)
+    assert got == (400, 100), f"差分算错：{got}"
+
+
+def test_round_cache_fields_serialize_unrecorded_as_none():
+    """未记录的一轮落盘必须是 None（JSON 里是 null），**不是 0**。"""
+    d = _round_cache_fields(RoundLog(index=7))
+    assert d == {"prompt_cache_hit_tokens": None,
+                 "prompt_cache_miss_tokens": None}, f"未记录落成了 {d}"
+
+
+def test_round_cache_fields_keep_a_real_zero():
+    """记到的 0 要原样落 0 —— 它与「未记录」在 JSON 里必须是两个值。"""
+    d = _round_cache_fields(RoundLog(index=7, prompt_cache_hit_tokens=0,
+                                     prompt_cache_miss_tokens=1200))
+    assert d["prompt_cache_hit_tokens"] == 0
+    assert d["prompt_cache_miss_tokens"] == 1200
+    assert d["prompt_cache_hit_tokens"] is not None, "报了的 0 被写成了 null"
+
+
+def test_callstats_cache_line_is_absent_when_unrecorded():
+    """整体统计那一行：端点没报就**不印任何数字**。"""
+    s = CallStats(calls=10, prompt_tokens=5000)
+    assert s.cache_line() is None, f"未报却印了缓存行：{s.cache_line()}"
+    s.prompt_cache_miss_tokens = 5000      # 报了、全未命中
+    assert s.cache_line() is None, "没标记 recorded 就不该印"
+    s.cache_recorded = True
+    line = s.cache_line()
+    assert line is not None and "0.0%" in line, f"应为 0.0%：{line}"
+
+
+def test_callstats_cache_line_reports_a_real_ratio():
+    s = CallStats(calls=10, prompt_tokens=10000, cache_recorded=True,
+                  prompt_cache_hit_tokens=7500, prompt_cache_miss_tokens=2500)
+    line = s.cache_line()
+    assert line is not None and "75.0%" in line, f"比例算错：{line}"
+    assert "7500" in line and "2500" in line, f"未给原始数：{line}"
 
 
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------

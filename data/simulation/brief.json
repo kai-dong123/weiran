@@ -239,7 +239,9 @@
       "completion_tokens": 3836,
       "errors": 0,
       "failures": 0,
-      "slowest": 3.25
+      "slowest": 3.25,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 1,
@@ -357,7 +359,9 @@
       "completion_tokens": 4522,
       "errors": 0,
       "failures": 0,
-      "slowest": 3.86
+      "slowest": 3.86,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 2,
@@ -458,7 +462,9 @@
       "completion_tokens": 2302,
       "errors": 0,
       "failures": 0,
-      "slowest": 9.14
+      "slowest": 9.14,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 3,
@@ -551,7 +557,9 @@
       "completion_tokens": 3236,
       "errors": 0,
       "failures": 0,
-      "slowest": 43.36
+      "slowest": 43.36,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 4,
@@ -647,7 +655,9 @@
       "completion_tokens": 2807,
       "errors": 0,
       "failures": 0,
-      "slowest": 2.77
+      "slowest": 2.77,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 5,
@@ -764,7 +774,9 @@
       "completion_tokens": 2931,
       "errors": 0,
       "failures": 0,
-      "slowest": 3.58
+      "slowest": 3.58,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 6,
@@ -871,7 +883,9 @@
       "completion_tokens": 2259,
       "errors": 0,
       "failures": 0,
-      "slowest": 5.03
+      "slowest": 5.03,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 7,
@@ -992,7 +1006,9 @@
       "completion_tokens": 2921,
       "errors": 0,
       "failures": 0,
-      "slowest": 4.84
+      "slowest": 4.84,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 8,
@@ -1093,7 +1109,9 @@
       "completion_tokens": 2897,
       "errors": 0,
       "failures": 0,
-      "slowest": 7.58
+      "slowest": 7.58,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 9,
@@ -1196,7 +1214,9 @@
       "completion_tokens": 1978,
       "errors": 0,
       "failures": 0,
-      "slowest": 8.3
+      "slowest": 8.3,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 10,
@@ -1288,7 +1308,9 @@
       "completion_tokens": 2851,
       "errors": 0,
       "failures": 0,
-      "slowest": 11.62
+      "slowest": 11.62,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 11,
@@ -1387,7 +1409,9 @@
       "completion_tokens": 2895,
       "errors": 0,
       "failures": 0,
-      "slowest": 17.44
+      "slowest": 17.44,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 12,
@@ -1471,7 +1495,9 @@
       "completion_tokens": 2888,
       "errors": 0,
       "failures": 0,
-      "slowest": 20.56
+      "slowest": 20.56,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 13,
@@ -1553,7 +1579,9 @@
       "completion_tokens": 2779,
       "errors": 0,
       "failures": 0,
-      "slowest": 15.55
+      "slowest": 15.55,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     },
     {
       "index": 14,
@@ -1637,7 +1665,9 @@
       "completion_tokens": 3376,
       "errors": 0,
       "failures": 0,
-      "slowest": 21.75
+      "slowest": 21.75,
+      "cache_hit_tokens": null,
+      "cache_miss_tokens": null
     }
   ],
   "turning_point": {
@@ -2011,7 +2041,23 @@
     "failures_recorded": true,
     "note": "调用失败次数与最慢单次来自产出文件逐轮记录。",
     "prompt_tokens": 4377107,
-    "completion_tokens": 44478
+    "completion_tokens": 44478,
+    "paths": {
+      "camel": {
+        "calls": 400,
+        "prompt_tokens": 4377107,
+        "completion_tokens": 44478,
+        "cache_recorded": false,
+        "cache_rounds": 0,
+        "cache_hit_tokens": 0,
+        "cache_miss_tokens": 0,
+        "cache_hit_pct": null
+      },
+      "direct": {
+        "recorded": false
+      },
+      "note": "直调路径（归类器）的用量**未记录在本产出文件里** —— 生成它的那次运行还没把这笔账写进产物。这不是 0：这笔花费在服务商账单上看得见，在这份产物里看不见。"
+    }
   },
   "evidence": {
     "rows": [

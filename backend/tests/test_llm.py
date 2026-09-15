@@ -32,6 +32,7 @@ from weiran.llm import (  # noqa: E402
     Usage,
     _ensure_json_hint,
     _strip_code_fence,
+    parse_cache,
 )
 
 
@@ -45,7 +46,18 @@ def _response(
     prompt_tokens: int = 10,
     completion_tokens: int = 5,
     reasoning_tokens: int = 0,
+    extra_usage: dict | None = None,
 ) -> dict:
+    usage = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "completion_tokens_details": {"reasoning_tokens": reasoning_tokens},
+    }
+    # 用来人为构造「端点到底报了哪些字段」的各种组合。
+    # **默认什么缓存字段都不写** —— 因为「端点没报」本身就是必须被测到的一支，
+    # 而它只能靠「字段缺席」来表达。
+    if extra_usage:
+        usage.update(extra_usage)
     return {
         "choices": [
             {
@@ -57,11 +69,7 @@ def _response(
                 },
             }
         ],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "completion_tokens_details": {"reasoning_tokens": reasoning_tokens},
-        },
+        "usage": usage,
     }
 
 
@@ -293,6 +301,157 @@ def test_chat_json_rejects_wrong_type():
         assert "list" in str(exc), f"未说明实际类型：{exc}"
         return
     raise AssertionError("期望 dict 却拿到 list，应当抛 LLMError")
+
+
+# -- 7. 前缀缓存：命中率决定的是单价，不是数量 -----------------------------
+
+
+def test_parse_cache_reads_deepseek_fields():
+    """DeepSeek 口径：两个平铺字段，直接读。"""
+    hit, miss, recorded = parse_cache(
+        {"prompt_tokens": 1000, "prompt_cache_hit_tokens": 800,
+         "prompt_cache_miss_tokens": 200}
+    )
+    assert (hit, miss, recorded) == (800, 200, True), f"读错：{hit}/{miss}/{recorded}"
+
+
+def test_parse_cache_reads_openai_shaped_cached_tokens():
+    """OpenAI 口径：`prompt_tokens_details.cached_tokens`，未命中要自己减出来。
+
+    不写这一支的话，换一个兼容端点就会把「报了 640 命中」读成「没报」，
+    于是命中率从「实知 64%」退化成「不知道」。
+    """
+    hit, miss, recorded = parse_cache(
+        {"prompt_tokens": 1000, "prompt_tokens_details": {"cached_tokens": 640}}
+    )
+    assert (hit, miss, recorded) == (640, 360, True), f"读错：{hit}/{miss}/{recorded}"
+
+
+def test_parse_cache_reads_object_usage():
+    """camel 那条路径递过来的是**对象**（`usage` 是 dataclass），不是 dict。
+
+    两条调用路径的 usage 类型不同，同一个解析函数必须都能吃。
+    """
+    class _U:
+        prompt_cache_hit_tokens = 300
+        prompt_cache_miss_tokens = 700
+
+    assert parse_cache(_U()) == (300, 700, True)
+
+
+def test_parse_cache_absent_means_unrecorded_not_zero():
+    """**最关键的一支**：字段缺席 → recorded=False，而不是「命中 0」。
+
+    「端点没报」与「报了，一次都没命中」在数值上都是 0，只有这个布尔量
+    能分开它们。把它写丢，等于把「我们不知道」永久存成「一次都没命中」。
+    """
+    assert parse_cache({"prompt_tokens": 1000}) == (0, 0, False)
+    assert parse_cache(None) == (0, 0, False)
+    # 报了字段、两端都是 0：**这是「报了」**，不是「没报」。
+    assert parse_cache(
+        {"prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 0}
+    ) == (0, 0, True)
+
+
+def test_cache_hit_rate_is_none_when_unrecorded():
+    """没报时是 None，**不是 0.0**。
+
+    0.0 把「我们不知道」印成「一次都没命中」，而这两件事的下一步动作
+    正好相反（一个去查端点，一个去查提示词前缀）。
+    """
+    u = Usage(prompt_tokens=1000)
+    assert u.cache_hit_rate is None, f"未报却给出了命中率：{u.cache_hit_rate}"
+
+
+def test_cache_hit_rate_zero_when_recorded_all_miss():
+    """报了、且一次都没命中 → 是 0.0，**而且必须是 0.0**。
+
+    与上一条对读：两个都是「0」，一个是不知道，一个是确知全未命中。
+    只测其中一条的话，把 cache_recorded 写成常数也能过。
+    """
+    u = Usage(prompt_tokens=1000, cache_miss_tokens=1000, cache_recorded=True)
+    assert u.cache_hit_rate == 0.0, f"应为 0.0：{u.cache_hit_rate}"
+
+
+def test_chat_reads_cache_fields_from_response():
+    """端到端：响应里带了缓存字段，客户端要把它读进账本。"""
+    ledger = Ledger()
+    c = _FakeClient(
+        _response(prompt_tokens=1000,
+                  extra_usage={"prompt_cache_hit_tokens": 900,
+                               "prompt_cache_miss_tokens": 100}),
+        ledger=ledger,
+    )
+    c.chat([{"role": "user", "content": "问题"}], tag="stance")
+    u = ledger.total
+    assert u.cache_recorded, "端点报了却没记成「已报」"
+    assert (u.cache_hit_tokens, u.cache_miss_tokens) == (900, 100)
+    assert abs(u.cache_hit_rate - 0.9) < 1e-9
+
+
+def test_chat_without_cache_fields_leaves_rate_unknown():
+    """响应里没有缓存字段 → 账本不许编一个命中率出来。"""
+    ledger = Ledger()
+    c = _FakeClient(_response(prompt_tokens=1000), ledger=ledger)
+    c.chat([{"role": "user", "content": "问题"}], tag="stance")
+    assert ledger.total.cache_recorded is False
+    assert ledger.total.cache_hit_rate is None
+    line = [ln for ln in ledger.summary().splitlines() if "前缀缓存" in ln][0]
+    assert "%" not in line, f"未报却印了百分比：{line}"
+
+
+def test_ledger_merge_ors_the_recorded_flag():
+    """一次报了、一次没报 → 合并后算「报过」。合并不许把已报的信息抹掉。"""
+    a = Usage(prompt_tokens=100, cache_hit_tokens=80, cache_miss_tokens=20,
+              cache_recorded=True)
+    a.merge(Usage(prompt_tokens=100))
+    assert a.cache_recorded and a.cache_hit_tokens == 80
+    # 反序：先没报、后报，也要变成「报过」。
+    c = Usage(prompt_tokens=100)
+    c.merge(Usage(prompt_tokens=100, cache_hit_tokens=50, cache_miss_tokens=50,
+                  cache_recorded=True))
+    assert c.cache_recorded, "后一次报了，合并后却是「没报」"
+
+
+def test_ledger_sums_cache_across_calls_not_a_constant():
+    """**防恒真**：两轮命中比例不同，合计必须等于两者之和。
+
+    若把 hit 与 miss 记成同一个数（例如都记成 prompt_tokens），
+    命中率会算成 50%，而正确值是 60% —— 这条就会失败。
+    """
+    ledger = Ledger()
+    c1 = _FakeClient(
+        _response(prompt_tokens=1000,
+                  extra_usage={"prompt_cache_hit_tokens": 900,
+                               "prompt_cache_miss_tokens": 100}),
+        ledger=ledger,
+    )
+    c1.chat([{"role": "user", "content": "第一轮"}], tag="stance")
+    c2 = _FakeClient(
+        _response(prompt_tokens=1000,
+                  extra_usage={"prompt_cache_hit_tokens": 300,
+                               "prompt_cache_miss_tokens": 700}),
+        ledger=ledger,
+    )
+    c2.chat([{"role": "user", "content": "第二轮"}], tag="stance")
+    u = ledger.total
+    assert (u.cache_hit_tokens, u.cache_miss_tokens) == (1200, 800), \
+        f"逐次累加错了：{u.cache_hit_tokens}/{u.cache_miss_tokens}"
+    assert abs(u.cache_hit_rate - 0.6) < 1e-9, f"命中率应为 0.6：{u.cache_hit_rate}"
+
+
+def test_ledger_as_dict_exposes_cache_and_the_recorded_flag():
+    """落盘快照要同时带数值与「报没报」。少了后者，读的人只能把 0 当答案。"""
+    ledger = Ledger()
+    ledger.record("stance",
+                  Usage(prompt_tokens=500, cache_hit_tokens=400,
+                        cache_miss_tokens=100, cache_recorded=True), 1.0)
+    d = ledger.as_dict()
+    assert d["cache_recorded"] is True
+    assert d["prompt_cache_hit_tokens"] == 400
+    assert d["prompt_cache_miss_tokens"] == 100
+    empty = Ledger().as_dict()
+    assert empty["cache_recorded"] is False, "空账本不该声称端点报过"
 
 
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------

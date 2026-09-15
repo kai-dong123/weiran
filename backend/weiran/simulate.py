@@ -46,6 +46,7 @@ from .config import (
     ensure_log_handler_encoding,
     load_config,
 )
+from .llm import Ledger, LLMClient, parse_cache
 from .perception import (
     Knowledge,
     KnowledgeError,
@@ -108,6 +109,38 @@ class RoundLog:
     # 仍然画得出来、简报仍然出得来，只有这两个数字知道出过事。
     truncations: int = 0                # 本轮发生的截断次数
     truncated_tokens: int = 0           # 本轮单次丢得最多的一次丢了多少 token
+    # 前缀缓存（本轮）。**用 None 表示「端点没报 / 本轮没调用」，不用 0** ——
+    # 0 的含义是「报了，一次都没命中」，两者对账单的指向相反。
+    prompt_cache_hit_tokens: int | None = None
+    prompt_cache_miss_tokens: int | None = None
+
+
+def _round_cache_fields(r: RoundLog) -> dict:
+    """逐轮缓存字段的**落盘形态**。未记录 → `None` → JSON 的 `null`。
+
+    单独抽成函数是为了让它可测：这一段决定了「没记」在产物里长什么样，
+    而它一旦落成 0，读到的人就只能把「不知道」读成「一次都没命中」。
+    旧产出里没有这两个键，消费方同样按「未记录」显示。
+    """
+    return {
+        "prompt_cache_hit_tokens": r.prompt_cache_hit_tokens,
+        "prompt_cache_miss_tokens": r.prompt_cache_miss_tokens,
+    }
+
+
+def _cache_delta(*, hit: int, miss: int, calls: int,
+                 base_hit: int, base_miss: int, base_calls: int
+                 ) -> tuple[int, int] | None:
+    """本轮的缓存用量差分。**本轮没报过就返回 None，不是 (0, 0)。**
+
+    `calls` 是「端点报过这个字段的调用次数」，差分它而不是差分命中数：
+    命中数不变有两种可能 —— 「本轮没调用」与「本轮调用了但端点没报」——
+    而这两件事对「本轮的账单可不可信」给出相反的回答。它一变化，说明
+    本轮确有报告，这时 (0, 0) 才是**真有意义**的「一次都没命中」。
+    """
+    if calls - base_calls <= 0:
+        return None
+    return hit - base_hit, miss - base_miss
 
 
 @dataclass
@@ -116,6 +149,10 @@ class SimulationResult:
     db_path: Path | None = None
     total_seconds: float = 0.0
     stance_summary: str = ""
+    # 直调那条路径（归类器）的账本快照。**必须落盘**：它走 `requests`，不经过
+    # camel 的模型对象，所以逐轮的 `calls` / `prompt_tokens` 里一个数都不含它。
+    # **旧产出没有这个键** —— 消费方必须把「缺失」显示成「未记录」而不是 0。
+    classifier_ledger: dict | None = None
     # 运行口径。**落盘时必须一起写出去** —— 压缩模式下的曲线与 round=day
     # 不可比（激励项按步累加，见 days_per_round 的注释），一份不知道自己
     # 是压缩过的结果文件，日后必然被当成 round=day 的结果引用。
@@ -661,6 +698,19 @@ class CallStats:
     slowest: float = 0.0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # 前缀缓存的命中 / 未命中。**它决定的是单价，不是数量。**
+    # 本项目有两条调用路径（camel 驱动的 agent / 直调的归类器），它们的
+    # 提示词前缀复用程度天生不同：camel 那条是追加式对话历史、前缀逐轮稳定，
+    # 直调那条每轮都是新问题。不记这两个数，「两条路径花了同样多的 token」
+    # 与「花了同样多的钱」就分不开 —— 而账单能差几倍。
+    prompt_cache_hit_tokens: int = 0
+    prompt_cache_miss_tokens: int = 0
+    #: 端点到底报没报这两个字段。与数值分开存，理由同 `llm.Usage.cache_recorded`。
+    cache_recorded: bool = False
+    #: 报过缓存字段的调用次数。**逐轮归属要用它做分母**：光看命中/未命中的
+    #: 差分分不清「本轮没调用」与「本轮调用了但端点没报」，而这两件事在
+    #: 「这一轮的账单可不可信」上是相反的回答。
+    cache_calls: int = 0
     # 每次调用的耗时。`slowest` 是**最大值，做不了差分**，所以想按轮报
     # 「本轮最慢一次」就必须留下逐次样本。代价是每次调用一个 float（可忽略），
     # 收益是那个 409s 的故障下次能直接定位到轮次。
@@ -676,6 +726,19 @@ class CallStats:
             f"（均值 {self.mean:.1f}s，最慢 {self.slowest:.1f}s，失败 {self.failures}）"
             f" · token 入 {self.prompt_tokens} / 出 {self.completion_tokens}"
         )
+
+    def cache_line(self) -> str | None:
+        """前缀缓存那一行。**端点没报时返回 None**，措辞交给调用方 ——
+        在这里硬编一句「未记录」会让它出现在所有本来不该提缓存的地方。
+        """
+        if not self.cache_recorded:
+            return None
+        seen = self.prompt_cache_hit_tokens + self.prompt_cache_miss_tokens
+        if seen == 0:
+            return None
+        return (f"前缀缓存 命中 {self.prompt_cache_hit_tokens}"
+                f" / 未命中 {self.prompt_cache_miss_tokens}"
+                f"（{self.prompt_cache_hit_tokens / seen:.1%}）")
 
 
 # 要包的方法名。四条都包：非结构化与结构化（response_format）各一对，
@@ -718,6 +781,15 @@ def instrument_model(model) -> CallStats:
         if usage is not None:
             stats.prompt_tokens += getattr(usage, "prompt_tokens", 0) or 0
             stats.completion_tokens += getattr(usage, "completion_tokens", 0) or 0
+            # 前缀缓存。**解析器与直调那条路径共用**（`llm.parse_cache`）：
+            # 那边拿到的是 dict、这边拿到的是 SDK 对象，字段名相同。
+            # 写两份的话，补第三套命名时漏掉一处是无声的。
+            n_hit, n_miss, reported = parse_cache(usage)
+            if reported:
+                stats.cache_recorded = True
+                stats.cache_calls += 1
+                stats.prompt_cache_hit_tokens += n_hit
+                stats.prompt_cache_miss_tokens += n_miss
 
     def _wrap(name: str) -> bool:
         original = getattr(cls, name, None)
@@ -1177,7 +1249,9 @@ async def _run(
         t0 = time.monotonic()
         before = (stats.calls, stats.seconds,
                   stats.prompt_tokens, stats.completion_tokens,
-                  stats.failures, len(stats.samples))
+                  stats.failures, len(stats.samples),
+                  stats.prompt_cache_hit_tokens, stats.prompt_cache_miss_tokens,
+                  stats.cache_calls)
         trunc_before = watch.count
         entry = RoundLog(index=i)
 
@@ -1238,6 +1312,17 @@ async def _run(
         entry.prompt_tokens = stats.prompt_tokens - before[2]
         entry.completion_tokens = stats.completion_tokens - before[3]
         entry.failures = stats.failures - before[4]
+        # 前缀缓存按轮归属。**只有本轮确实有调用报过这个字段才落数** ——
+        # 否则留 None。写成 0 会让「端点没报」在产出里长成「一次都没命中」。
+        # `before` 的 6/7/8 位分别是命中 / 未命中 / 报过的调用数。
+        _delta = _cache_delta(
+            hit=stats.prompt_cache_hit_tokens,
+            miss=stats.prompt_cache_miss_tokens,
+            calls=stats.cache_calls,
+            base_hit=before[6], base_miss=before[7], base_calls=before[8],
+        )
+        if _delta is not None:
+            entry.prompt_cache_hit_tokens, entry.prompt_cache_miss_tokens = _delta
         # 最慢一次取本轮样本的最大值 —— `stats.slowest` 是全程最大值，差分不出来。
         entry.slowest = round(max(stats.samples[before[5]:], default=0.0), 2)
         # 上下文压力。截断发生在 `env.step` 里（拼 prompt 的时候），但归类器
@@ -1323,6 +1408,12 @@ async def _run(
     # 保证六维曲线一模一样（见 stance.py 开头）。
     stance.save()
     result.stance_summary = stance.summary()
+    # 直调那条路径（归类器）的账，在这里取快照 —— **必须等轮到跑完**，
+    # 早取一步就是一份空账。它不经过 camel 的模型对象，所以本函数逐轮记的
+    # `calls` / `prompt_tokens` 一个数都不含它：那笔钱在服务商账单上看得见、
+    # 在自己的产物里看不见。见 `llm.Ledger.as_dict`。
+    _ledger = getattr(llm, "ledger", None)
+    result.classifier_ledger = _ledger.as_dict() if _ledger is not None else None
     await env.close()
     return result
 
@@ -1421,10 +1512,14 @@ def main(argv: list[str] | None = None) -> int:
         "关" if args.no_knowledge else "开"))
 
     # 归类用独立的客户端：它要的是稳定与便宜，不需要推理。
+    #
+    # **账本要显式建、显式传进去。** 不传的话 `LLMClient` 会自建一个私有
+    # 账本（见 `llm.LLMClient.__init__`），而没有任何代码会去读它 ——
+    # 于是这条路径花掉的钱既不进逐轮记账、也不进产出，只在服务商账单上出现。
+    # 这个 bug 曾经真的存在：一个 `LLMClient(config.llm)` 就写完了。
     classifier_llm = None
     if not args.no_world_state and not args.keyword_stance:
-        from .llm import LLMClient
-        classifier_llm = LLMClient(config.llm)
+        classifier_llm = LLMClient(config.llm, Ledger())
 
     result = asyncio.run(_run(
         config, out_dir,
@@ -1509,6 +1604,27 @@ def main(argv: list[str] | None = None) -> int:
               "（逻辑时钟：这一步挡的是「打断 tool 配对 → 端点 400 → "
               "丢一整轮动作」）")
 
+    # 两条调用路径的账必须摆在同一行里看。camel 那条的数是逐轮 calls 之和；
+    # 直调那条（归类器）**不进逐轮**，只在产出与这里。分开写的话，读者看到
+    # 的永远是半张账 —— 这正是「新 API 更花钱」这个疑问的来源：直调路径的
+    # 花费此前既不进逐轮、也不进产出，只在服务商账单上。
+    _camel_calls = sum(r.calls for r in result.rounds)
+    _camel_in = sum(r.prompt_tokens for r in result.rounds)
+    _camel_out = sum(r.completion_tokens for r in result.rounds)
+    if result.classifier_ledger:
+        _cl = result.classifier_ledger
+        print(f"记账：camel 路径 {_camel_calls} 次调用"
+              f"（入 {_camel_in} / 出 {_camel_out} tok）"
+              f" · 直调路径 {_cl['calls']} 次调用"
+              f"（入 {_cl['prompt_tokens']} / 出 {_cl['completion_tokens']} tok）")
+        if _cl.get("failures"):
+            print(f"  ⚠️ 直调路径有 {_cl['failures']} 次调用失败 —— "
+                  "失败也要进账，不能只算成功的那些")
+    else:
+        print(f"记账：camel 路径 {_camel_calls} 次调用"
+              f"（入 {_camel_in} / 出 {_camel_out} tok）"
+              " · 直调路径未启用（本轮未记账，≠ 花费为 0）")
+
     out_file = out_dir / f"{args.platform}_rounds.json"
     out_file.write_text(
         json.dumps(
@@ -1545,6 +1661,13 @@ def main(argv: list[str] | None = None) -> int:
                     "chunking_still_sliced": result.chunking_still_sliced,
                     "chunking_timestamp_pushed":
                         result.chunking_timestamp_pushed,
+                    # 直调路径（归类器）的账。**这个键缺失 ≠ 它花了 0** ——
+                    # 入库那份产出就是旧口径（跑它的时候还没有这个字段），
+                    # 所以消费方遇到缺失要显示「未记录」，不是 0。
+                    "classifier_ledger": result.classifier_ledger,
+                    # 归类器自己的口径（多少条文本、几次调用、多少退回关键词）。
+                    # 它决定「行为序列是怎么来的」，与曲线同等重要。
+                    "stance_summary": result.stance_summary,
                 },
                 "rounds": [
                     {"index": r.index, "seconds": round(r.seconds, 2),
@@ -1557,6 +1680,7 @@ def main(argv: list[str] | None = None) -> int:
                      "injection_sample": r.injection_sample,
                      "truncations": r.truncations,
                      "truncated_tokens": r.truncated_tokens,
+                     **_round_cache_fields(r),
                      "behaviors": r.behaviors, "state": r.state,
                      "actions": r.actions, "errors": r.errors}
                     for r in result.rounds

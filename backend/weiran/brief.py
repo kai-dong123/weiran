@@ -598,6 +598,10 @@ def build_brief(
             # 不能当成 0** —— 一个编出来的 0 比一个空值危险得多。
             "failures": rd.get("failures"),
             "slowest": rd.get("slowest"),
+            # 前缀缓存（逐轮）。同样是后加字段：老产出里没有 → None，
+            # **不是 0**。0 与 None 在 JSON 里必须是两个不同的值。
+            "cache_hit_tokens": rd.get("prompt_cache_hit_tokens"),
+            "cache_miss_tokens": rd.get("prompt_cache_miss_tokens"),
         })
 
     deviation = replay_deviation(results, rounds)
@@ -606,7 +610,7 @@ def build_brief(
     degradations = _degradations(meta, rows, coverage, per_round, deviation, dpr,
                                  evidence=evidence)
 
-    cost = _cost_block(per_round)
+    cost = _cost_block(per_round, meta)
     brief = {
         "provenance": {
             **rounds_doc.get("_provenance", {}),
@@ -932,7 +936,7 @@ def _degradations(meta, rows, coverage, per_round, deviation, dpr,
     return out
 
 
-def _cost_block(per_round: list[dict]) -> dict:
+def _cost_block(per_round: list[dict], meta: dict) -> dict:
     """成本汇总。
 
     **复用 `CallStats.summary()`，但不能假装它的默认值是真的。**
@@ -971,7 +975,112 @@ def _cost_block(per_round: list[dict]) -> dict:
                  "生成这份简报时它们按「未记录」显示，不是 0。"),
         "prompt_tokens": stats.prompt_tokens,
         "completion_tokens": stats.completion_tokens,
+        "paths": _path_block(per_round, meta),
     }
+
+
+def _pct(hit: int, miss: int) -> float | None:
+    """命中率，**以百分数存**（不是 0~1 的小数）。
+
+    存成 87.5 而不是 0.875，是为了让正文能直接印 `87.5%` 而仍然满足
+    `check_brief` 第 5 条「正文里的每个数值都能在结构化数据里找到来源」——
+    那条检查按数值比，`0.875` 与印出来的 `87.5` 对不上。
+    """
+    seen = hit + miss
+    if seen == 0:
+        return None
+    return round(100.0 * hit / seen, 1)
+
+
+def _path_block(per_round: list[dict], meta: dict) -> dict:
+    """两条调用路径的成本对照。
+
+    本项目有两条路径：camel 驱动的 agent，和 `llm.LLMClient` 的直调
+    （归类器每轮一次、画像构建每角色一次）。直调走 `requests`，不经过
+    camel 的模型对象 —— 所以逐轮的 `calls` / `tokens` **一个数都不含它**。
+    不把两条摆在一起，「钱花在哪了」这个问题就只能看一眼服务商账单。
+
+    **旧产出没有 `meta.classifier_ledger`**（生成它的那次运行还没记这笔账），
+    这时如实报「未记录」，**不许补 0** —— 0 是「跑了但没花钱」的形态，
+    与「没记」是两件事。
+    """
+    camel_hits = [r for r in per_round if r.get("cache_hit_tokens") is not None]
+    c_hit = sum(r["cache_hit_tokens"] for r in camel_hits)
+    c_miss = sum(r["cache_miss_tokens"] for r in camel_hits)
+    camel = {
+        "calls": sum(r["calls"] for r in per_round),
+        "prompt_tokens": sum(r["prompt_tokens"] for r in per_round),
+        "completion_tokens": sum(r["completion_tokens"] for r in per_round),
+        # **只要有任何一轮落了数就算「记了」**；缺的轮次不当 0 相加 ——
+        # 那会让一个记了一半的产出看起来比一个完全没记的产出更准。
+        "cache_recorded": bool(camel_hits),
+        "cache_rounds": len(camel_hits),
+        "cache_hit_tokens": c_hit,
+        "cache_miss_tokens": c_miss,
+        "cache_hit_pct": _pct(c_hit, c_miss),
+    }
+
+    led = meta.get("classifier_ledger")
+    if not isinstance(led, dict):
+        direct = {"recorded": False}
+    else:
+        d_hit = int(led.get("prompt_cache_hit_tokens") or 0)
+        d_miss = int(led.get("prompt_cache_miss_tokens") or 0)
+        d_rec = bool(led.get("cache_recorded"))
+        direct = {
+            "recorded": True,
+            "calls": led.get("calls"),
+            "failures": led.get("failures"),
+            "prompt_tokens": led.get("prompt_tokens"),
+            "completion_tokens": led.get("completion_tokens"),
+            "cache_recorded": d_rec,
+            "cache_hit_tokens": d_hit,
+            "cache_miss_tokens": d_miss,
+            "cache_hit_pct": _pct(d_hit, d_miss) if d_rec else None,
+        }
+
+    return {
+        "camel": camel,
+        "direct": direct,
+        "note": ("直调路径的用量来自产出文件里的 `meta.classifier_ledger`。"
+                 if direct["recorded"] else
+                 "直调路径（归类器）的用量**未记录在本产出文件里** —— "
+                 "生成它的那次运行还没把这笔账写进产物。这不是 0："
+                 "这笔花费在服务商账单上看得见，在这份产物里看不见。"),
+    }
+
+
+def _path_sentence(p: dict) -> str:
+    """把两条调用路径摆在同一句里。**未记录的那条不补 0，并说明为什么。**
+
+    这一句是「为什么新路径看起来更花钱」的现场答案：旧产出里直调那条
+    根本没被记账，于是读者只能看到 camel 那半张账。
+    """
+    c = p["camel"]
+    d = p["direct"]
+    line = (f"**两条调用路径**：camel 驱动的 agent 路径 {c['calls']} 次调用"
+            f"（入 {c['prompt_tokens']} / 出 {c['completion_tokens']} tok）")
+    if d["recorded"]:
+        line += (f"；直调的归类器路径 {d['calls']} 次调用"
+                 f"（入 {d['prompt_tokens']} / 出 {d['completion_tokens']} tok）")
+    else:
+        line += ("；直调的归类器路径**未记录在本产出里** —— 这不是 0，"
+                 "生成它的那次运行还没把这笔账写进产物，"
+                 "而这笔花费在服务商账单上看得见")
+    line += ("。分开报的理由：直调走 `requests`、不经过 camel 的模型对象，"
+             "逐轮表里的 calls 与 tokens **一个数都不含它**。")
+
+    # 前缀缓存只在端点真的报过时才印数。**没报就不印 0%** —— 那等于替
+    # 端点回答了一个它没回答的问题，而排查方向会被整个带反。
+    if c["cache_recorded"] and c["cache_hit_pct"] is not None:
+        line += (f" camel 路径的前缀缓存：命中 {c['cache_hit_tokens']} / "
+                 f"未命中 {c['cache_miss_tokens']} tok"
+                 f"（{c['cache_hit_pct']}%）—— 命中率决定的是单价，不是数量。")
+    if d["recorded"] and d.get("cache_recorded") and d.get("cache_hit_pct") is not None:
+        line += (f" 直调路径的前缀缓存：命中 {d['cache_hit_tokens']} / "
+                 f"未命中 {d['cache_miss_tokens']} tok"
+                 f"（{d['cache_hit_pct']}%）。")
+    return line
 
 
 def render_markdown(brief: dict) -> str:
@@ -1179,6 +1288,8 @@ def render_markdown(brief: dict) -> str:
     w(f"**合计**：{c['summary']}")
     w("")
     w(c["note"])
+    w("")
+    w(_path_sentence(c["paths"]))
     w("")
 
     # -- 【四】能／不能 ---------------------------------------------------

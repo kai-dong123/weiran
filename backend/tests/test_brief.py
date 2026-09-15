@@ -706,6 +706,119 @@ def test_recorded_failure_fields_are_used():
 
 
 # ---------------------------------------------------------------------------
+# 7b. 两条调用路径：这笔钱在账单上看得见，在产物里看不看得见
+# ---------------------------------------------------------------------------
+#
+# 本项目有两条路径：camel 驱动的 agent，和 `llm.LLMClient` 的直调（归类器
+# 每轮一次、画像构建每角色一次）。直调走 `requests`、不经过 camel 的模型
+# 对象，所以逐轮表里的 calls / tokens **一个数都不含它** —— 那笔钱只在
+# 服务商账单上。这里守的就是「补账时不许把它补成 0」。
+
+
+def test_direct_path_is_declared_unrecorded_not_zero():
+    """旧产出没有 `meta.classifier_ledger` → 印「未记录」，**不印 0 次调用**。
+
+    「没记账」与「跑了但没花钱」在数值上都是 0，只有一句声明能分开它们。
+    """
+    b = _build()
+    p = b["cost"]["paths"]
+    assert p["direct"]["recorded"] is False, "合成产出本就没有这个键"
+    assert "未记录" in p["note"], p["note"]
+    md = B.render_markdown(b)
+    assert "归类器路径**未记录在本产出里**" in md, "未记录没有被说明"
+    assert "归类器路径 0 次调用" not in md, "未记录被印成了「0 次调用」"
+    assert B.check_brief(b, md) == [], B.check_brief(b, md)
+
+
+def test_direct_path_is_used_when_recorded():
+    """反面：产出里**有**账本时，必须用真实值，不能继续报「未记录」。"""
+    rd = _rounds()
+    rd["meta"]["classifier_ledger"] = {
+        "calls": 15, "failures": 0, "wall_seconds": 12.0,
+        "prompt_tokens": 20000, "completion_tokens": 3000,
+        "reasoning_tokens": 0,
+        "prompt_cache_hit_tokens": 15000, "prompt_cache_miss_tokens": 5000,
+        "cache_recorded": True,
+    }
+    b = _build(rd)
+    d = b["cost"]["paths"]["direct"]
+    assert d["recorded"] is True
+    assert d["calls"] == 15 and d["prompt_tokens"] == 20000
+    assert d["cache_hit_pct"] == 75.0, d["cache_hit_pct"]
+    md = B.render_markdown(b)
+    assert "未记录" not in b["cost"]["paths"]["note"], "记了账却仍报「未记录」"
+    assert "15 次调用" in md, "记了账却没进正文"
+    assert "75.0%" in md, "命中率没进正文"
+    assert B.check_brief(b, md) == [], B.check_brief(b, md)
+
+
+def test_camel_path_cache_is_reported_when_recorded():
+    """camel 那半张账：端点报了缓存就必须印出来，且**不是把命中当成未命中**。
+
+    命中与未命中写成同一个数，命中率会算成 50%，而正确值是 60%。
+    """
+    rd = _rounds(n_rounds=3)
+    # 第三轮给 (0, 0)：**报了、这一轮一次都没命中**。它与「没报」在合计里
+    # 贡献一样多，但 `cache_rounds` 必须把它算进去 —— 那才是「报了」。
+    for r, (hit, miss) in zip(rd["rounds"], [(900, 100), (300, 700), (0, 0)]):
+        r["prompt_cache_hit_tokens"] = hit
+        r["prompt_cache_miss_tokens"] = miss
+    b = _build(rd)
+    c = b["cost"]["paths"]["camel"]
+    assert (c["cache_hit_tokens"], c["cache_miss_tokens"]) == (1200, 800)
+    assert c["cache_hit_pct"] == 60.0, c["cache_hit_pct"]
+    assert c["cache_rounds"] == 3
+    md = B.render_markdown(b)
+    assert "60.0%" in md, f"命中率没进正文：{md[-800:]}"
+    assert B.check_brief(b, md) == [], B.check_brief(b, md)
+
+
+def test_camel_cache_is_silent_when_endpoint_did_not_report():
+    """端点没报 → **一个数字都不印**，不印 0%。
+
+    印 0% 等于替端点回答了一个它没回答的问题，排查方向会被整个带反。
+    """
+    b = _build()
+    c = b["cost"]["paths"]["camel"]
+    assert c["cache_recorded"] is False
+    assert c["cache_hit_pct"] is None
+    md = B.render_markdown(b)
+    assert "前缀缓存" not in md, f"没报却印了缓存：{md[-800:]}"
+
+
+def test_partial_cache_recording_does_not_count_missing_rounds_as_zero():
+    """只有部分轮落了数时，**缺的轮次不按 0 相加**。
+
+    否则一个「只记了一半」的产出会显得比「完全没记」的产出更准 ——
+    而那正是它最不该有的样子。记了几轮就要说几轮。
+    """
+    rd = _rounds(n_rounds=3)
+    rd["rounds"][1]["prompt_cache_hit_tokens"] = 800
+    rd["rounds"][1]["prompt_cache_miss_tokens"] = 200
+    b = _build(rd)
+    c = b["cost"]["paths"]["camel"]
+    assert c["cache_rounds"] == 1, c["cache_rounds"]
+    assert (c["cache_hit_tokens"], c["cache_miss_tokens"]) == (800, 200), \
+        f"缺的两轮被当成了 0：{c}"
+    assert c["cache_hit_pct"] == 80.0
+
+
+def test_round_cache_fields_absent_is_not_zero():
+    """逐轮字段：旧产出缺这两个键 → None；**报了的 0 要原样是 0**。"""
+    b = _build()
+    assert all(r["cache_hit_tokens"] is None for r in b["rounds"]), \
+        "合成产出本就没有这两个字段，不该有值"
+
+    rd = _rounds()
+    rd["rounds"][0]["prompt_cache_hit_tokens"] = 0
+    rd["rounds"][0]["prompt_cache_miss_tokens"] = 500
+    b2 = _build(rd)
+    first = b2["rounds"][0]["cache_hit_tokens"]
+    assert first == 0 and first is not None, "报了的 0 被读成了「未记录」"
+    assert b2["cost"]["paths"]["camel"]["cache_hit_pct"] == 0.0
+
+
+# ---------------------------------------------------------------------------
 # 8. 装载侧
 # ---------------------------------------------------------------------------
 

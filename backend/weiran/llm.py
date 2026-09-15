@@ -73,6 +73,19 @@ class Usage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     reasoning_tokens: int = 0
+    # 前缀缓存的命中 / 未命中。**必须单列 —— 它决定的是单价，不是数量。**
+    # 服务端对命中前缀的那段输入给很大折扣（本项目所用端点即如此），于是
+    # 「同样 1 万 token 的输入」按命中计费与按未命中计费不是一个价。
+    # 只记 prompt_tokens 的话，账本只能回答「花了多少 token」，回答不了
+    # 「按什么价花的」—— 而后者正是两条调用路径账单不同的地方。
+    #
+    # 两端点都不报时留 0。这时**不能读成「一次都没命中」**：见 cache_hit_rate。
+    cache_hit_tokens: int = 0
+    cache_miss_tokens: int = 0
+    #: 端点到底报没报这两个字段。**必须与数值分开存** —— 否则「没报」只能
+    #: 用「数值为 0」来表达，而那正好也是「报了，一次都没命中」的表达。
+    #: 与 `brief.py` 里 `cost.failures_recorded` 是同一条纪律。
+    cache_recorded: bool = False
 
     @property
     def total(self) -> int:
@@ -83,10 +96,27 @@ class Usage:
         """输出里真正是答案的那部分。"""
         return max(0, self.completion_tokens - self.reasoning_tokens)
 
+    @property
+    def cache_hit_rate(self) -> float | None:
+        """前缀缓存命中率。**端点没报这个字段时返回 None，不是 0.0。**
+
+        把「没报」显示成 0% 会把一句「我们不知道」读成一句「一次都没命中」，
+        而这两件事的下一步动作完全相反（前者要去查端点，后者要去查提示词前缀）。
+        """
+        if not self.cache_recorded:
+            return None
+        seen = self.cache_hit_tokens + self.cache_miss_tokens
+        if seen == 0:
+            return None
+        return self.cache_hit_tokens / seen
+
     def merge(self, other: Usage) -> None:
         self.prompt_tokens += other.prompt_tokens
         self.completion_tokens += other.completion_tokens
         self.reasoning_tokens += other.reasoning_tokens
+        self.cache_hit_tokens += other.cache_hit_tokens
+        self.cache_miss_tokens += other.cache_miss_tokens
+        self.cache_recorded = self.cache_recorded or other.cache_recorded
 
 
 @dataclass
@@ -117,22 +147,105 @@ class Ledger:
             agg.merge(u)
         return agg
 
+    def as_dict(self) -> dict:
+        """落盘用的快照。**给「另一条调用路径」记账用。**
+
+        本项目有两条路径：camel 驱动的 agent，和本模块的直调。直调走
+        `requests`，不经过 camel 的模型对象，所以产出里逐轮的
+        `calls` / `prompt_tokens` **一个数都不含它** —— 那笔钱在服务商
+        账单上看得见，在自己的产物里看不见。这个快照就是把它补上。
+        """
+        t = self.total
+        return {
+            "calls": self.calls,
+            "failures": self.failures,
+            "wall_seconds": round(self.wall_seconds, 2),
+            "prompt_tokens": t.prompt_tokens,
+            "completion_tokens": t.completion_tokens,
+            "reasoning_tokens": t.reasoning_tokens,
+            "prompt_cache_hit_tokens": t.cache_hit_tokens,
+            "prompt_cache_miss_tokens": t.cache_miss_tokens,
+            "cache_recorded": t.cache_recorded,
+            "by_tag": {
+                tag: {
+                    "prompt_tokens": u.prompt_tokens,
+                    "completion_tokens": u.completion_tokens,
+                    "reasoning_tokens": u.reasoning_tokens,
+                }
+                for tag, u in sorted(self.by_tag.items())
+            },
+            "summary": self.summary(),
+        }
+
     def summary(self) -> str:
         t = self.total
+        rate = t.cache_hit_rate
         lines = [
             f"调用 {self.calls} 次（失败 {self.failures} 次），"
             f"耗时 {self.wall_seconds:.1f}s，"
             f"token 合计 {t.total}"
             f"（输入 {t.prompt_tokens} / 输出 {t.completion_tokens}"
-            f"，其中推理 {t.reasoning_tokens}）"
+            f"，其中推理 {t.reasoning_tokens}）",
+            # 输入侧的价格几乎全由这一行决定。少了它，「两条路径花了同样多的
+            # token」与「花了同样多的钱」就分不开 —— 而这两件事的账单能差几倍。
+            # 未报时**不印任何数字**：印「命中率 0%」等于替端点回答了一个它
+            # 没回答的问题。
+            ("  前缀缓存：端点未报此字段，命中率无从判断"
+             if not t.cache_recorded else
+             ("  前缀缓存：已报字段但样本为空，命中率无从判断"
+              if rate is None else
+              f"  前缀缓存：命中率 {rate:.1%}"
+              f"（命中 {t.cache_hit_tokens} / 未命中 {t.cache_miss_tokens} tok）")),
         ]
         for tag, u in sorted(self.by_tag.items(), key=lambda kv: -kv[1].total):
+            r = u.cache_hit_rate
             lines.append(
                 f"  {tag:22s} {u.total:8d} tok  "
                 f"输入 {u.prompt_tokens} / 输出 {u.completion_tokens}"
                 f"（推理 {u.reasoning_tokens}）"
+                + ("" if r is None else f"  缓存命中 {r:.0%}")
             )
         return "\n".join(lines)
+
+
+def _uget(obj, key: str):
+    """从 dict 或对象上取一个字段。没有就 None（**不是 0**）。"""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def parse_cache(raw_usage) -> tuple[int, int, bool]:
+    """从 usage 里取前缀缓存的（命中, 未命中, 端点是否报过）。
+
+    见过两套命名，按优先级依次试：
+
+      1. DeepSeek：`prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`（都给）
+      2. OpenAI：`prompt_tokens_details.cached_tokens`（只给命中）
+      3. 都没有 → 第三个返回值为 False，含义是**端点没报**
+
+    第 3 种必须与「报了，但都是 0」区分开，所以标志位单列而不靠数值推断。
+    第 2 种只给命中数时，未命中按 `prompt_tokens - 命中` 推 —— 这是恒等式，
+    不是猜测。
+
+    **两条调用路径共用这一个解析器**：直调走 `requests` 拿到的是 dict，
+    camel 那条拿到的是 SDK 的对象，形状不同、字段名相同。写两份的话，
+    哪天补第三套命名就要记得改两处，而漏掉那处是无声的。
+    """
+    hit = _uget(raw_usage, "prompt_cache_hit_tokens")
+    miss = _uget(raw_usage, "prompt_cache_miss_tokens")
+    if hit is None and miss is None:
+        details = _uget(raw_usage, "prompt_tokens_details")
+        cached = _uget(details, "cached_tokens")
+        if cached is None:
+            return 0, 0, False
+        n_hit = int(cached)
+        # 只给命中数时，未命中是恒等式推出来的，不是猜的
+        n_miss = max(0, int(_uget(raw_usage, "prompt_tokens") or 0) - n_hit)
+        return n_hit, n_miss, True
+    return int(hit or 0), int(miss or 0), True
 
 
 def _strip_code_fence(text: str) -> str:
@@ -282,10 +395,14 @@ class LLMClient:
 
         raw_usage = data.get("usage") or {}
         details = raw_usage.get("completion_tokens_details") or {}
+        n_hit, n_miss, has_cache = parse_cache(raw_usage)
         usage = Usage(
             prompt_tokens=int(raw_usage.get("prompt_tokens", 0)),
             completion_tokens=int(raw_usage.get("completion_tokens", 0)),
             reasoning_tokens=int(details.get("reasoning_tokens", 0)),
+            cache_hit_tokens=n_hit,
+            cache_miss_tokens=n_miss,
+            cache_recorded=has_cache,
         )
         self.ledger.record(tag, usage, elapsed)
 
