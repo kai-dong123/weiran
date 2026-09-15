@@ -14,7 +14,9 @@
 > **已定位并修掉切片护栏引入的静默丢回合（`_record_tool_calling` 用 `base + 1e-6`
 > 预留回执位，而写入路径时钟分辨率约 1ms —— 终稿读数落进那 1 微秒窗口就触发端点 400、
 > 该 agent 该轮动作整条丢；修法是让 shim 成为该 agent 时间戳的唯一权威）**；
-> 322 条测试全绿，五层可复现性自检通过）
+> **已把「哪些层是随机的」做成可机检的声明，并把多 seed 批次工具与离线汇总器
+> 备好（零成本的一半已落地，批次待跑）**；
+> 413 条测试全绿，五层可复现性自检通过）
 
 > **要把它跑起来，看 [`docs/使用手册.md`](docs/使用手册.md)。**
 > 那份手册负责「怎么跑、产出在哪、每个字段怎么读、哪些数不能按字面读」；
@@ -81,21 +83,24 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 322 条，一次跑完（推荐）
+python -m pytest tests/             # 413 条，一次跑完（推荐）
 
-# 十二套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
+# 十五套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
 python tests/test_world_state.py    # 23/23
-python tests/test_llm.py            # 30/30
+python tests/test_llm.py            # 33/33
 python tests/test_stance.py         # 26/26
 python tests/test_perception.py     # 49/49
 python tests/test_brief.py          # 55/55
 python tests/test_gold_check.py     # 27/27
-python tests/test_simulate.py       # 33/33
+python tests/test_simulate.py       # 36/36
 python tests/test_config.py         # 12/12
 python tests/test_repro_check.py    # 13/13
 python tests/test_viewer.py         # 21/21
-python tests/test_handbook.py       # 19/19
+python tests/test_stability.py      # 11/11
+python tests/test_stability_report.py  # 31/31
+python tests/test_run_seeds.py      # 34/34
+python tests/test_handbook.py       # 28/28
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
 python -m weiran.brief              # 决策简报（读已有产出，不调 LLM）
@@ -247,22 +252,29 @@ backend/
     brief.py        决策简报：5 个窗口 × 两条分支未来 + 拐点对照 + 逐轮证据量（不依赖 LLM）
     smoke.py        连通性冒烟（端点 / JSON / 中文 / 推理开关成本）
     gold_check.py   金标对照表：金标自己写的 10 条断言逐条核（不依赖 LLM）
+    stability.py    随机性来源表（五层）与进程级播种：声明哪些层能收窄、哪些不能
     viewer.py       只读展示层：把已有产物渲成页面（可选依赖 flask，不触发 LLM）
   repro_check.py    可复现性分级自检（五层各测一遍；产物写临时运行目录）
+  run_seeds.py      多 seed 批次驱动：按 seed 起 N 支臂，输入同源与协议一致由程序强制
+                    （默认只打印估算与拒绝理由；不给 --yes 不发请求）
+  stability_report.py  批次离线汇总：逐轮逐维跨臂均值/范围 + 逐臂金标三态（不依赖 LLM）
   tests/
     test_store.py        14 条
     test_world_state.py  23 条
-    test_llm.py          30 条
+    test_llm.py          33 条
     test_stance.py       26 条
     test_perception.py   49 条
     test_brief.py        55 条
     test_gold_check.py   27 条
-    test_simulate.py     33 条
+    test_simulate.py     36 条
     test_config.py       12 条
     test_repro_check.py  13 条
     test_viewer.py       21 条
-    test_handbook.py     19 条
-    —— 共 322 条，`python -m pytest tests/` 一次跑完
+    test_stability.py    11 条
+    test_stability_report.py  31 条
+    test_run_seeds.py    34 条
+    test_handbook.py     28 条
+    —— 共 413 条，`python -m pytest tests/` 一次跑完
 data/
   simulation/                      推演产出（入库：是「跑得通」的证据）
     twitter_rounds.json            27 agent × 15 轮：逐轮状态、行为、成本、
@@ -307,6 +319,34 @@ docs/
   不含随机数、不含时间戳，因此同输入必然同输出，并被 `repro_check.py` 逐字校验。
   这条例外不是洁癖：不划这条边界，「不可复现」就会从一条有范围的结论，
   膨胀成所有地方都可以不确定的理由。
+- **「不可复现」之外还有一半：这份产出到底是怎么跑出来的，它自己记不记得。**
+  六维曲线之所以不确定，是因为它的输入是一次 LLM 抽样；正式口径因此是
+  **多 seed 跑 N 次、报均值与方差**，而不是把一次抽样当结论。这一半的状态是
+  **零成本的部分已落地、批次还没跑**，两件事分开说：
+  - **已落地的是「可审计」**：产出的 `meta` 现在记 `seed` / `temperature` /
+    `random_seeded`（老产出没这些键时，消费方一律显示「**未记录**」——
+    缺键不是 `0`，本次确实没传也不是「未记录」，三态分开）；`stability.py`
+    把随机性来源写成**唯一出处的一张表**（camel 端点采样 / 直调归类 / OASIS
+    的 `refresh` 抽签 / `asyncio` 交错 / 重试抖动），手册里的同一张表由测试
+    与代码逐行核对。`--seed` 这根杆也**真的拉上了**：它原先只到 LLM 端点，
+    而 agent 每轮看到哪几条帖是 OASIS 用 `random.sample` 抽的（入库产出里
+    `refresh` 324 次，是 774 个动作里最大的一项），这条路径用的是标准库全局
+    RNG，所以进程里播一次种就覆盖到了。**它管不到的是 LLM 端点采样
+    （服务端只「尽力」遵守）与 `asyncio.gather` 的交错顺序**——后者决定写库
+    次序，也就决定 `post_id` 分给谁、后一个 agent 点赞的是哪条帖。所以
+    `--seed` 买到的是「钉住」，不是「可复现」，这句话写在产出里、不写在文档里。
+  - **未落地的是「跑一批」**，原因不是懒：有两个内核常数待决（每轮注入体量
+    该不该减、`VOLUME_REF` 该不该随 agent 数走），**任一个改动都会让已经跑出来
+    的臂全部作废**，所以次序必须是先拍板再花钱。工具不等这批——
+    `run_seeds.py` 与 `stability_report.py` 已经就位并可用零网络的假臂测通：
+    前者不给 `--yes` 就只打印墙钟与 token 估算（并标明**那是外推不是测量、
+    不含金额**）一个请求都不发，臂目录已存在不覆盖、三个输入文件逐臂拷贝并
+    核对 sha256 同源、臂间协议不一致直接拒绝，单臂失败就停下并报出是第几支；
+    后者是纯离线汇总，逐轮逐维给跨臂均值与范围、逐臂重算金标三态并归并成
+    「稳 / 翻转」，**混合批次拒绝出报告而不是偷偷求平均**。它产物开头写死
+    一句「这不是分数，是同一批设定下 N 次抽样的离散」，且贴过边界的维度
+    （`trust` / `polarization` / `risk` / `stability`）只标不判——夹逼会
+    把跨臂离散压小，那种离散是假的。
 - **代价也写进文档，不只写收益，而且认错了要改**。六维回注会经 agent 记忆
   逐轮累积，实测每轮 prompt 比不回注高得越来越多（3 轮里从 +12% 拉到 +100%）。
   本项目曾据此把回注判为上下文增长的**主因**，并计划子类化 `AgentMemory` 去治它——

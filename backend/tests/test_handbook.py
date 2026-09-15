@@ -230,21 +230,31 @@ def test_repro_check_is_documented_with_its_own_flags():
 # ---------------------------------------------------------------------------
 
 def test_documented_test_counts_match_the_files():
-    """手册里逐套写的条数，必须与源码里 `def test_` 的条数一致。
+    """手册与 README 里逐套写的条数，必须与源码里 `def test_` 的条数一致。
 
     这些数字是本项目「有多少条测试在盯着」的唯一对外读数。
     它们过期了，读者不会知道；但它过期这件事本身就是文档漂移。
+
+    **两个文件都要查，是因为 README 里有两处写条数的地方**（快速开始那段
+    可复制的命令、与「目录结构」那棵树）。只查一处的话，另一处会安静地
+    停在上一版的数字上 —— 这正是这次实际发生的事：改完树、漏了快速开始。
     """
     counts = _test_counts()
-    text = _text()
     bad = []
-    for name, n in sorted(counts.items()):
-        m = re.search(rf"tests/{name}\.py\s*#\s*(\d+)", text)
-        if not m:
-            bad.append(f"{name}: 手册没写它的条数")
-        elif int(m.group(1)) != n:
-            bad.append(f"{name}: 手册写 {m.group(1)}，实际 {n}")
-    assert not bad, "手册里的测试条数对不上：\n  " + "\n  ".join(bad)
+    for path in (HANDBOOK, README):
+        text = path.read_text(encoding="utf-8")
+        for name, n in sorted(counts.items()):
+            # 两种写法都要认：命令块里的 `# 14/14`、树里的 `14 条`。
+            # 树里那个不带 `tests/` 前缀 —— 漏了这个可选前缀，就等于
+            # 没查那棵树（实测过：把树里的 `33 条` 改成 `30 条`，测试不红）。
+            hits = re.findall(rf"tests/{name}\.py\s*#\s*(\d+)", text)
+            hits += re.findall(rf"(?:tests/)?{name}\.py\s+(\d+)\s*条", text)
+            if not hits:
+                bad.append(f"{path.name}: 没写 {name} 的条数")
+            for h in hits:
+                if int(h) != n:
+                    bad.append(f"{path.name}: {name} 写 {h}，实际 {n}")
+    assert not bad, "文档里的测试条数对不上：\n  " + "\n  ".join(bad)
 
 
 def test_every_standalone_runner_guards_the_console_encoding():
@@ -279,14 +289,25 @@ def test_every_standalone_runner_guards_the_console_encoding():
 
 
 def test_documented_total_matches_the_sum():
-    """总数必须等于逐套之和 —— 两处各写一个数字，迟早有一处忘了改。"""
+    """总数必须等于逐套之和 —— 两处各写一个数字，迟早有一处忘了改。
+
+    手册与 README 一起查（README 里也写了两处，见上一条的说明）。
+    """
     counts = _test_counts()
     total = sum(counts.values())
-    text = _text()
-    stated = re.findall(r"(\d+)\s*条离线测试", text) + re.findall(r"#\s*(\d+)\s*条", text)
-    assert stated, "手册没写总条数"
-    for s in stated:
-        assert int(s) == total, f"手册写 {s} 条，逐套加起来是 {total} 条"
+    bad = []
+    for path in (HANDBOOK, README):
+        text = path.read_text(encoding="utf-8")
+        stated = (re.findall(r"(\d+)\s*条离线测试", text)
+                  + re.findall(r"#\s*(\d+)\s*条", text)
+                  + re.findall(r"(\d+)\s*条测试全绿", text)
+                  + re.findall(r"共\s*(\d+)\s*条", text))
+        if not stated:
+            bad.append(f"{path.name}: 没写总条数")
+        for s in stated:
+            if int(s) != total:
+                bad.append(f"{path.name}: 写 {s} 条，逐套加起来是 {total} 条")
+    assert not bad, "\n  ".join(bad)
 
 
 def test_documented_degradation_kinds_match_the_source():
@@ -482,6 +503,269 @@ def test_handbook_names_the_known_degradations():
     text = _text()
     for must in ("相位", "1.31%", "767", "证伪", "待决", "chunking-guard"):
         assert must in text, f"坦白清单里少了 {must!r} —— 这一节不许被删薄"
+
+
+#: 从一节的开头扫到下一个三级标题。写成常量而不是内联字符串，是因为
+#: 它**必须**是一个真换行 —— 本节其余地方的 `\n` 都在正则里，混在一起
+#: 很容易把这一处也写成转义序列而它偏偏不能是。
+_NEXT_HEADING = "\n###"
+
+
+def _variance_table() -> set[str]:
+    """§4.8 那张「会变的那五处」表的 key 列。
+
+    同样**只取那一节** —— 全文正则会连 `.env` 键名表一起收进来。
+    """
+    text = _text()
+    start = text.find("### 4.8")
+    assert start >= 0, "手册里找不到 §4.8 —— 稳定性那一节的编号变过了"
+    end = text.find(_NEXT_HEADING, start + 1)
+    section = text[start:end if end > 0 else len(text)]
+    return set(re.findall(r"^\|\s*`(\w+)`\s*\|", section, re.M))
+
+
+def _root_script_flags(name: str) -> set[str]:
+    """`backend/` 根下那几个脚本（不在 `weiran/` 包里）的 argparse 开关。
+
+    它们按行解析时看不见 —— 手册里写的是 `python run_seeds.py`，不是
+    `python -m weiran.X`。所以单独抽一次。
+    """
+    src = (REPO_ROOT / "backend" / f"{name}.py").read_text(encoding="utf-8")
+    return set(re.findall(r'add_argument\("(--[a-z0-9-]+)"', src))
+
+
+def test_documented_variance_sources_match_the_source():
+    """§4.8 那张表列的随机性来源，必须与 `stability.py` 的 `VARIANCE_SOURCES`
+    完全一致。
+
+    两个方向都查，与降级项那张表同款做法：手册漏写的（读者以为没有这一层）、
+    手册编出来的（照着表去核对代码会找不到），都是错的。
+
+    这一条是**第 2 块剩下的那一半**：那张表在代码里是唯一出处，消费者是
+    汇总器与手册。谁哪天在代码里加一层随机性而没写进手册，这里会红。
+    """
+    from weiran import stability as S
+
+    real = {v.key for v in S.VARIANCE_SOURCES}
+    assert len(real) >= 5, f"只抽到 {len(real)} 个来源 —— 表被删薄了？"
+
+    documented = _variance_table()
+    assert documented == real, (
+        f"手册漏了：{sorted(real - documented)}；"
+        f"手册写了代码里没有的：{sorted(documented - real)}")
+
+
+def test_the_variance_table_states_a_total_that_matches():
+    """「五处」这个数也要对上 —— 一个数错的总数比没有总数更糟。"""
+    from weiran import stability as S
+
+    stated = re.search(r"会变的那\*\*?五处\*\*?|会变的那五处", _text())
+    assert stated, "手册没写一共几处会变"
+    assert len(S.VARIANCE_SOURCES) == 5, (
+        f"代码里现在是 {len(S.VARIANCE_SOURCES)} 处，手册的「五处」要改")
+
+
+def test_the_unseedable_layer_is_still_marked_as_unseedable():
+    """**asyncio 交错那一行不许被写成「能收窄」。** 它是这份清单存在的理由：
+    播了种之后仍然收不回来的那一层要说清楚，否则读者会把 `--seed` 读成
+    「可复现」。
+    """
+    from weiran import stability as S
+
+    row = next(v for v in S.VARIANCE_SOURCES if v.key == "asyncio_interleaving")
+    assert "不能" in row.seedable, row.seedable
+    text = _text()
+    assert "播种覆盖不到" in text, "手册没写清播种覆盖不到哪一层"
+
+
+def test_the_handbook_says_the_batch_has_not_been_run():
+    """工具就位、**批次待跑** —— 且要写出为什么待跑。
+
+    这一条防的是两种走样：把「工具就位」写成「已经做完了」（那是在
+    虚报），以及把待决原因删掉（读者会以为现在就能跑一批）。
+    """
+    text = _text()
+    assert "工具已经就位" in text
+    assert "但一批还没跑" in text or "一批还没跑" in text
+    for must in ("run_seeds.py", "stability_report.py"):
+        assert must in text, f"手册没提 {must}"
+
+
+def test_the_stability_tools_are_documented_with_their_own_flags():
+    """手册里 `python run_seeds.py ...` / `python stability_report.py ...`
+    那几行用的开关，必须真被那两个脚本接受。
+
+    它们不在 `weiran/` 包里，上面那条按行解析的测试看不见它们 —— 而一条
+    「照着敲会失败」的命令，看起来和一条正确的命令一模一样。
+    """
+    text = _text()
+    for script in ("run_seeds", "stability_report"):
+        real = _root_script_flags(script)
+        assert len(real) >= 3, f"只从 {script} 里抽出 {len(real)} 个开关 —— 抽取失效"
+        seen = 0
+        for line in text.splitlines():
+            if f"python {script}.py" not in line:
+                continue
+            seen += 1
+            for flag in re.findall(r"(--[a-z][a-z0-9-]*)", line):
+                assert flag in real, (
+                    f"手册写了 {script} {flag}，而它不接受（接受：{sorted(real)}）")
+        assert seen, f"手册里没有 `python {script}.py` 的命令行"
+
+
+def test_the_preflight_command_is_not_filed_under_free():
+    """**`--preflight` 会真发请求。** 它跑的是 1 agent × 2 轮的真推演，
+    只是便宜 —— 手册不能把它列在「都不花钱」那一块下面，那会把「便宜」
+    洗成「免费」，而这一整节的立足点就是不洗这类话。
+    """
+    text = _text()
+    # **只看 §5 那个速查块。** §4.8 的散文里也会提到 preflight，而它在
+    # 「都不花钱」之前 —— 那不是在分栏归类，不能算进来。
+    start = text.find("## 5. 命令速查")
+    end = text.find("## 6.", start + 1)
+    assert start > 0 and end > start
+    lines = text[start:end].splitlines()
+
+    free_at = next(i for i, l in enumerate(lines) if "# 都不花钱" in l)
+    paid_at = next(i for i, l in enumerate(lines) if "# 花钱" in l)
+    assert free_at < paid_at
+    pf = [i for i, l in enumerate(lines) if "python run_seeds.py" in l
+          and "--preflight" in l]
+    assert pf, "速查块里没有 preflight 的命令"
+    for i in pf:
+        assert i > paid_at, (
+            "preflight 被列在「都不花钱」下面了 —— 它是要发请求的")
+    # 同一次核对：dry-run 那一行**必须**留在免费那栏（它真的不发请求）。
+    dry = [i for i, l in enumerate(lines) if "python run_seeds.py" in l
+           and "--preflight" not in l]
+    for i in dry:
+        assert free_at < i < paid_at, (
+            "批次计划那一行是免费的（不加 --yes 不发请求），不该列在花钱栏")
+
+
+# -- 资源清单里那几个数字（行数、套数、条数）也要是实测的 --------------------
+
+MANIFEST = REPO_ROOT / "docs" / "开源及第三方资源使用清单.md"
+
+#: 模块行 → 它该对哪个套件。只列**一对一**的那些；场景装载 / 角色画像 /
+#: 金标校验 / 连通性冒烟没有自己的套件（由别的套件覆盖），行里本来也没写条数。
+_SUITE_OF_MODULE = {
+    "config.py": "test_config",
+    "llm.py": "test_llm",
+    "world_state.py": "test_world_state",
+    "store.py": "test_store",
+    "stance.py": "test_stance",
+    "perception.py": "test_perception",
+    "simulate.py": "test_simulate",
+    "gold_check.py": "test_gold_check",
+    "viewer.py": "test_viewer",
+    "brief.py": "test_brief",
+    "stability.py": "test_stability",
+    "repro_check.py": "test_repro_check",
+    "run_seeds.py": "test_run_seeds",
+    "stability_report.py": "test_stability_report",
+}
+
+
+def _manifest_rows() -> list[tuple[str, int, int | None]]:
+    """清单第三节表格的每一行 → `(文件路径, 行数, 测试条数或 None)`。
+
+    **只认带 `（N 行）` 的行**，因为只有那种行在声明一个可核的数。
+    """
+    rows = []
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"\|\s*[^|]+\|\s*`(backend/[\w/]+\.py)`（([\d,]+) 行）", line)
+        if not m:
+            continue
+        t = re.search(r"（(\d+) 条测试）", line)
+        rows.append((m.group(1), int(m.group(2).replace(",", "")),
+                     int(t.group(1)) if t else None))
+    return rows
+
+
+def test_the_manifest_row_counts_are_measured_not_remembered():
+    """清单自称「行数为实测（`wc -l`）」，那就当场实测一遍。
+
+    这条不是形式主义：这份清单的合计与它自己那几行**曾经相加对不上**
+    （差 165 行），而它是参赛必交附件。数字漂了没人会知道 ——
+    文档不会自己发现自己在说谎，只会安静地漂走。
+    """
+    rows = _manifest_rows()
+    assert len(rows) >= 18, (
+        f"只认出 {len(rows)} 行 —— 解析器多半失配了（这是防恒真的下限，不是行数上限）")
+    counts = _test_counts()
+    bad = []
+    for path, stated, tcount in rows:
+        p = REPO_ROOT / path
+        if not p.exists():
+            bad.append(f"{path}: 清单里有、仓库里没有")
+            continue
+        real = len(p.read_text(encoding="utf-8").splitlines())
+        if real != stated:
+            bad.append(f"{path}: 清单写 {stated} 行，实际 {real} 行")
+        suite = _SUITE_OF_MODULE.get(p.name)
+        if suite is not None and tcount is not None and suite in counts:
+            if tcount != counts[suite]:
+                bad.append(f"{path}: 清单写 {tcount} 条测试，"
+                           f"{suite}.py 里是 {counts[suite]} 条")
+    assert not bad, "资源清单的行数/条数对不上实测：\n  " + "\n  ".join(bad)
+
+
+def test_the_manifest_totals_are_the_sum_of_its_own_rows():
+    """合计必须等于逐行相加 —— 两处各写一个数，迟早有一处忘了改。"""
+    text = MANIFEST.read_text(encoding="utf-8")
+    m = re.search(r"\*\*合计\*\*：(\d+) 个自研模块共 ([\d,]+) 行 \+ (\d+) 套离线测试共 "
+                  r"([\d,]+) 行 = \*\*(\d+) 条测试全绿\*\*", text)
+    assert m, "清单里找不到那句合计（格式变了就要一起改）"
+
+    rows = _manifest_rows()
+    n_mod, n_lines = int(m.group(1)), int(m.group(2).replace(",", ""))
+    n_suite, s_lines = int(m.group(3)), int(m.group(4).replace(",", ""))
+    n_tests = int(m.group(5))
+
+    suites = sorted(TESTS.glob("test_*.py"))
+    assert n_mod == len(rows), f"合计写 {n_mod} 个模块，表里有 {len(rows)} 行"
+    assert n_lines == sum(r[1] for r in rows), (
+        f"合计写 {n_lines} 行，逐行加起来是 {sum(r[1] for r in rows)} 行")
+    assert n_suite == len(suites), f"合计写 {n_suite} 套，实际 {len(suites)} 套"
+    got_lines = sum(len(p.read_text(encoding="utf-8").splitlines()) for p in suites)
+    assert s_lines == got_lines, f"合计写 {s_lines} 行测试，实际 {got_lines} 行"
+    total = sum(_test_counts().values())
+    assert n_tests == total, f"合计写 {n_tests} 条，逐套加起来是 {total} 条"
+
+
+_ZH_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+              "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def _zh_number(s: str) -> int:
+    """「十五」→ 15。只处理到 99 —— 这个用法只需要这个范围。"""
+    if "十" not in s:
+        return _ZH_DIGITS.get(s, -1)
+    head, _, tail = s.partition("十")
+    tens = _ZH_DIGITS.get(head, 1) if head else 1
+    ones = _ZH_DIGITS.get(tail, 0) if tail else 0
+    return tens * 10 + ones
+
+
+def test_the_documented_suite_count_matches_the_directory():
+    """「十五套测试也都能不装 pytest 直接跑」——那个数得真的是目录里套数。
+
+    **只认当前那句**：两份文档里都还有一句「当时**九套**测试全绿」，
+    那是在讲一次历史事件（第 3 层那个静默覆盖缺陷），不是在报今天的套数。
+    所以这里不扫全文，只找「N 套测试…也都能」那一句。
+    """
+    n = len(list(TESTS.glob("test_*.py")))
+    bad = []
+    for path in (HANDBOOK, README):
+        text = path.read_text(encoding="utf-8")
+        hits = re.findall(r"([一二三四五六七八九十]+)套测试\*{0,2}也都能", text)
+        if len(hits) != 1:
+            bad.append(f"{path.name}: 找不到唯一那句「N 套测试…也都能」（找到 {len(hits)} 处）")
+            continue
+        if _zh_number(hits[0]) != n:
+            bad.append(f"{path.name}: 写 {hits[0]}套，目录里是 {n} 套")
+    assert not bad, "\n  ".join(bad)
 
 
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
