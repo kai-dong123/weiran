@@ -7,6 +7,7 @@
     「未然」的可复现性是**分层**的，不是一句「我们可复现」能概括的。
 
     第 3 层  端到端（同一条命令 → 同一条曲线）   ❌ 不可复现，且**原理上做不到**
+    第 2.6 层 金标对照（同一份产出 → 同一张表）  ✅ 确定，`test_gold_check.py` 锁住
     第 2.5 层 简报（同一份产出 → 同一份文字）    ✅ 确定，`test_brief.py` 锁住
     第 2 层  推演（同样的行为序列 → 同样的曲线） ✅ 确定，`test_world_state.py` 锁住
     第 1 层  归类（同样的文本 → 同样的标签）     ✅ 确定，缓存 + `test_stance.py` 锁住
@@ -51,10 +52,13 @@
 变成了不去做确定性的借口。这一层还顺带比对落盘样例是否与当前代码一致，
 防的是「模板改了、样例没重跑」。
 
+第 2.6 层同理由，多一条：**金标对照表的结论必须能被评委自己跑出来**。
+那张表里有三条否决，正是靠这一层才成为可核对的结论而不是一句表态。
+
 用法：
     cd backend
-    python repro_check.py            # 四层都跑
-    python repro_check.py --skip-e2e # 只跑确定的三层（快、不花钱）
+    python repro_check.py            # 五层都跑
+    python repro_check.py --skip-e2e # 只跑确定的四层（快、不花钱）
 """
 
 from __future__ import annotations
@@ -318,6 +322,64 @@ def check_brief() -> bool | None:
     return ok
 
 
+def check_gold_check() -> bool | None:
+    """第 2.6 层：金标对照表 —— 同一份产出 → 同一张表。
+
+    这一层与第 2.5 层同规格，但**多守一件事**：那张表的结论要能被评委
+    自己跑出来。所以这里比对的不只是「两次跑一样」，还包括**落盘的那份
+    与当前代码一致** —— 三条否决算不算数，取决于这张表是不是算出来的。
+
+    为什么不能只靠单元测试：单测守的是「函数按契约工作」，守不住
+    「仓库里那份给人看的结论，与当前代码算出来的不是同一张」。
+    """
+    print("\n【第 2.6 层】金标对照表：同一份产出 → 同一张表")
+    import json
+
+    from weiran import gold_check as G
+    from weiran.config import REPO_ROOT
+
+    run_path = REPO_ROOT / "data" / "simulation" / "twitter_rounds.json"
+    if not run_path.is_file():
+        print(f"  ⏭  缺少 {run_path.name} —— **这不是「通过」，是没测到**。")
+        return None
+
+    rd = G.load_rounds(run_path)
+    gold = G.load_gold(REPO_ROOT / G.DEFAULT_SCENARIO)
+    # 这一层要**整份**逐字比对落盘样例，而对照表的正文里印着它自己的生成
+    # 命令（第五节「来源」）。所以重算时必须用 CLI 的默认命令，不能用
+    # "repro_check" —— 否则两边只差那一行 provenance，比对会被顶成
+    # 「结论与代码不一致」，而那个结论其实是同一个。命令从模块里取，
+    # 不在这里重抄：CLI 改了默认命令而样例没重跑，这一层就该红。
+    a = G.build_gold_check(rd, gold, command=G.DEFAULT_COMMAND)
+    b = G.build_gold_check(rd, gold, command=G.DEFAULT_COMMAND)
+    md_a, md_b = G.render_markdown(a), G.render_markdown(b)
+    j_a = json.dumps(a, ensure_ascii=False, sort_keys=True)
+    j_b = json.dumps(b, ensure_ascii=False, sort_keys=True)
+
+    ok = md_a == md_b and j_a == j_b
+    print(f"  {'✅' if md_a == md_b else '❌'} markdown 逐字一致（{len(md_a)} 字符）")
+    print(f"  {'✅' if j_a == j_b else '❌'} JSON 逐字一致")
+
+    sample = REPO_ROOT / "data" / "simulation" / "gold_check.md"
+    if sample.is_file():
+        # 比整份文件（含 provenance）。上面用的是 CLI 的默认命令，与产出
+        # 它的那条命令一致，所以能整份比；整份比严格，那就整份比。
+        fresh = md_a == sample.read_text(encoding="utf-8")
+        ok = ok and fresh
+        print(f"  {'✅' if fresh else '❌'} 落盘样例 data/simulation/gold_check.md 与当前代码一致"
+              + ("" if fresh else "（代码改了没重跑：python -m weiran.gold_check）"))
+    else:
+        print("  ⏭  尚无落盘样例，跳过一致性比对")
+        ok = False
+
+    s = a["summary"]
+    print(f"  → 对照表确定且样例最新：{'是 ✅' if ok else '否 ❌'}"
+          f"（通过 {s['counts']['通过']} · 否决 {s['counts']['否决']} · "
+          f"不可判定 {s['counts']['不可判定']}；判得出来的 {s['judged']} 条里"
+          f"只有 {len(s['trusted_ids'])} 条可采信）")
+    return ok
+
+
 # ---------------------------------------------------------------------------
 # 第 3 层：端到端 —— 同一条命令，同一条曲线
 # ---------------------------------------------------------------------------
@@ -404,7 +466,7 @@ def main() -> int:
     args = ap.parse_args()
 
     results = {"归类": check_classifier(), "引擎": check_engine(),
-               "简报": check_brief()}
+               "简报": check_brief(), "对照表": check_gold_check()}
     if not args.skip_e2e:
         # **第 3 层的产物写进临时目录。** 它跑的是完整的 LLM 推演，
         # 若沿用默认输出路径，跑一次自检就会覆盖 `data/simulation/` 里
@@ -419,10 +481,10 @@ def main() -> int:
               + ("⏭ 未测到" if v is None else "✅ 确定" if v else "❌ 不确定"))
     print("=" * 62)
     # **第 3 层不进退出码** —— 它不可复现是已知且已解释的性质，不是失败。
-    # 把它算进去会让这个脚本天天红，然后就没人看了。前两层与简报层进。
+    # 把它算进去会让这个脚本天天红，然后就没人看了。前两层与简报/对照表层进。
     # 「未测到」(None) **算失败**：产出文件随仓库入库，缺了就是仓库不完整，
     # 而一个「跑不动所以全绿」的自检脚本正好是它要防的那种东西。
-    gated = [results[k] for k in ("归类", "引擎", "简报")]
+    gated = [results[k] for k in ("归类", "引擎", "简报", "对照表")]
     if any(v is None for v in gated):
         print("  ⚠️ 有检查未测到（见上）—— 未测到按失败计，不按通过计")
     return 0 if all(v is True for v in gated) else 1

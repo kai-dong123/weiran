@@ -1,0 +1,381 @@
+{
+  "not_a_score": {
+    "statement": "本表逐条核对金标自己写的断言「在这**一次**运行里发生了没有」，**不是模型有多准**。它没有分母，也没有被比较的基准 —— 所以它既不能被加总成一个「得分」，也不能与另一次运行的读数比出「提高了多少」。",
+    "why": "reference_shape（各阶段六维状态值）是**作者手写的强度预期**，不是观测值，也不是评分基准。任何以它为分母算出的『准确率』都是自说自话。",
+    "why_it_matters": "把人工写下的数字当作评分基准，正是本工作明确拒绝的做法。金标必须区分『叙事事实』与『作者预期』两类，混在一起就是给评测注水。",
+    "source": "benchmark/scenarios/*/reference_data.json → gold_status",
+    "excluded_from_judgement": "`reference_shape`（作者手写的强度预期）**不参与任何判据** —— `load_gold` 在读取时已把它剥掉。判据只吃产出记的六维曲线与金标 assertions 自己写的阈值/顺序。"
+  },
+  "meta": {
+    "agents": 27,
+    "rounds": 15,
+    "platform": "twitter",
+    "days_per_round": 1.0,
+    "compressed": false
+  },
+  "replay_max_deviation": 4.924954769952583e-05,
+  "degradations": [
+    {
+      "kind": "truncated",
+      "text": "全程 767 次记忆截断，单次最多丢弃 1234443 token —— 最坏的那一轮里，agent 能看到的记忆**不超过自己的 1.31%**（丢弃量是窗口上限的 75 倍），而且 camel 是**按打分**丢低分的—— 留下的不保证是最近的那一段。被截断轮次的 agent 在丢失历史的状态下说话，数字要打折"
+    },
+    {
+      "kind": "railed",
+      "text": "R9、R10、R11、R12、R13、R14 有维度**恰好贴到上下界**（极化、风险、稳定、信任）—— `_clamp(·, 0, 1)` 的边界产物，不是读数；这些轮次的曲线形状由夹逼决定，不由行为决定"
+    }
+  ],
+  "alignment": {
+    "days_per_round": 1.0,
+    "index_base": 0,
+    "rows": [
+      {
+        "phase": "P1",
+        "round_index": 0,
+        "gold_day": 0,
+        "match": true
+      },
+      {
+        "phase": "P2",
+        "round_index": 2,
+        "gold_day": 2,
+        "match": true
+      },
+      {
+        "phase": "P3",
+        "round_index": 5,
+        "gold_day": 5,
+        "match": true
+      },
+      {
+        "phase": "P4",
+        "round_index": 8,
+        "gold_day": 8,
+        "match": true
+      },
+      {
+        "phase": "P5",
+        "round_index": 14,
+        "gold_day": 14,
+        "match": true
+      }
+    ],
+    "by_phase": {
+      "P1": 0,
+      "P2": 2,
+      "P3": 5,
+      "P4": 8,
+      "P5": 14
+    },
+    "rule": "阶段 → 轮号取自产出里 `rounds[*].phase_id` **非空**的那几轮（`phase_id` 记录的是「这一轮注入了哪个阶段」，只有少数轮有）。本表一律用产出的 0 基 `index`；`gold_day` 是金标 `phases[].day`。两者在 `days_per_round = 1.0`（轮 = 天）时应逐位相等 —— `match` 列为 null 表示本产出不是轮=天，天与轮不可直接比。",
+    "note_1based": "**别与 1 基的 R 号混用。** 2026-09-14 那批表是 0 基（R0~R14），后来的日志用 1 基（R1~R15）。本表全部 0 基，如需对照 1 基加 1。"
+  },
+  "railing": {
+    "railed_rounds": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "railed_dims": [
+      "polarization",
+      "risk",
+      "stability",
+      "trust"
+    ],
+    "rule": "一个值恰好等于 0.0000 或 1.0000 即为贴界（`_clamp(·, 0, 1)` 的夹逼产物）。**判据读过的那几个 (维, 轮) 里只要有一个踩在贴界上，该条即「不采信」** —— 不是「结果作废」，是「这个结果不能当证据」。"
+  },
+  "assertions": [
+    {
+      "id": "AS-1",
+      "type": "direction",
+      "claim": "trust 在 P1→P3 单调下降",
+      "check": "trust(P3) < trust(P2) < trust(P1)",
+      "verdict": "通过",
+      "trusted": true,
+      "no_trust_because": [],
+      "values": {
+        "trust(P1)": 0.6843,
+        "trust(P2)": 0.6191,
+        "trust(P3)": 0.4448
+      },
+      "detail": "0.4448 < 0.6191 < 0.6843",
+      "tainted_by_railing": [],
+      "undecidable_because": null,
+      "to_make_decidable": null
+    },
+    {
+      "id": "AS-2",
+      "type": "ordering",
+      "claim": "attention 在 P3 见顶",
+      "check": "argmax_phase(attention) == P3",
+      "verdict": "否决",
+      "trusted": true,
+      "no_trust_because": [],
+      "values": {
+        "attention(P3)": 0.3021,
+        "argmax_attention": 0.3465,
+        "argmax_phase": "P4",
+        "argmax_all_15_rounds": {
+          "phase": "10",
+          "value": 0.3467
+        }
+      },
+      "detail": "argmax = P4（0.3465）；P3 是 0.3021。 剔掉贴界轮后 argmax = P4（0.3465）",
+      "tainted_by_railing": [],
+      "undecidable_because": null,
+      "to_make_decidable": null,
+      "argmax_rule": "`argmax_phase` 有两个口径：只在 5 个**阶段轮**上取，或在全部 15 轮上取。本表按「阶段轮」取，因为金标写的是阶段（P3），而阶段只在被注入的那一轮上有落点；另一个口径的读数同时印出来供核对。",
+      "variant": {
+        "scope": "剔掉贴界轮的阶段轮",
+        "argmax_phase": "P4",
+        "value": 0.3465,
+        "rounds_used": [
+          0,
+          2,
+          5,
+          8
+        ]
+      }
+    },
+    {
+      "id": "AS-3",
+      "type": "threshold",
+      "claim": "risk 在 P3 越过 0.7",
+      "check": "risk(P3) >= 0.70",
+      "verdict": "否决",
+      "trusted": true,
+      "no_trust_because": [],
+      "values": {
+        "risk(P3)": 0.4736,
+        "threshold": 0.7
+      },
+      "detail": "risk(P3) = 0.4736，金标阈值 0.70 —— 差 0.2264",
+      "tainted_by_railing": [],
+      "undecidable_because": null,
+      "to_make_decidable": null,
+      "threshold_from": "金标 check 原文"
+    },
+    {
+      "id": "AS-4",
+      "type": "ordering",
+      "claim": "polarization 在 P3 见顶",
+      "check": "argmax_phase(polarization) == P3",
+      "verdict": "否决",
+      "trusted": false,
+      "no_trust_because": [
+        "贴界"
+      ],
+      "values": {
+        "polarization(P3)": 0.3308,
+        "argmax_polarization": 1.0,
+        "argmax_phase": "P5",
+        "argmax_all_15_rounds": {
+          "phase": "11",
+          "value": 1.0
+        }
+      },
+      "detail": "argmax = P5（1.0000）；P3 是 0.3308。 剔掉贴界轮后 argmax = P4（0.6310）",
+      "tainted_by_railing": [
+        {
+          "dimension": "polarization",
+          "round": 14,
+          "value": null
+        }
+      ],
+      "undecidable_because": null,
+      "to_make_decidable": null,
+      "argmax_rule": "`argmax_phase` 有两个口径：只在 5 个**阶段轮**上取，或在全部 15 轮上取。本表按「阶段轮」取，因为金标写的是阶段（P3），而阶段只在被注入的那一轮上有落点；另一个口径的读数同时印出来供核对。",
+      "variant": {
+        "scope": "剔掉贴界轮的阶段轮",
+        "argmax_phase": "P4",
+        "value": 0.631,
+        "rounds_used": [
+          0,
+          2,
+          5,
+          8
+        ]
+      }
+    },
+    {
+      "id": "AS-5",
+      "type": "asymmetry",
+      "claim": "信任恢复显著弱于关注回落（核心断言）",
+      "check": "attention(P3)-attention(P5) > 3 * (trust(P5)-trust(P3))",
+      "verdict": "通过",
+      "trusted": false,
+      "no_trust_because": [
+        "判据恒真",
+        "贴界"
+      ],
+      "values": {
+        "left": 0.0184,
+        "right": -1.3344,
+        "attention(P3)-attention(P5)": 0.0184,
+        "3*(trust(P5)-trust(P3))": -1.3344
+      },
+      "detail": "左端 0.0184，右端 -1.3344。 **右端为负（信任下降 -0.4448），这条判据在该数据上恒真** —— 它与「不对称」无关：把信任换成任何一个下降得更快的量，结论一样。",
+      "tainted_by_railing": [
+        {
+          "dimension": "trust",
+          "round": 14,
+          "value": null
+        }
+      ],
+      "undecidable_because": null,
+      "to_make_decidable": null
+    },
+    {
+      "id": "AS-6",
+      "type": "irreversibility",
+      "claim": "P5 信任未回到 P1 基线",
+      "check": "trust(P5) < trust(P1) - 0.10",
+      "verdict": "通过",
+      "trusted": false,
+      "no_trust_because": [
+        "贴界"
+      ],
+      "values": {
+        "trust(P5)": 0.0,
+        "trust(P1)": 0.6843,
+        "trust(P1)-0.10": 0.5843
+      },
+      "detail": "trust(P5) = 0.0000，基线减 0.10 是 0.5843",
+      "tainted_by_railing": [
+        {
+          "dimension": "trust",
+          "round": 14,
+          "value": null
+        }
+      ],
+      "undecidable_because": null,
+      "to_make_decidable": null
+    },
+    {
+      "id": "AS-7",
+      "type": "event_order",
+      "claim": "劝删事件被检出且排在口径质疑之后、父母介入之前",
+      "check": "seq(劝删) in (seq(口径质疑), seq(家长介入))",
+      "verdict": "不可判定",
+      "trusted": null,
+      "no_trust_because": [],
+      "values": {},
+      "detail": "产出里**没有「叙事事件 → 检出信号」的映射**。金标 `event_order` 是 17 条有序叙事事件，产出有逐轮行为分类与引擎自报的事件（`suppression_detected` 等），但没有任何字段把两者连起来 —— 「劝删被检出」这句话在产出里无法机检。",
+      "tainted_by_railing": [],
+      "undecidable_because": "缺两样：(a) 产出侧的事件 id，(b) 一条能表达「排在某两者之间」的判据",
+      "to_make_decidable": "① 产出：`injected` 现在只存「actor → 块文本的 sha1 前 12 位」，注入事件时把它的事件 id 一并落盘，事件顺序才可机检。② 金标：`check` 原文写的是 `seq(劝删) in (seq(口径质疑), seq(家长介入))`，这是「属于其中某一个」，而 `claim` 说的是「排在两者之间」—— 表达式与声称**不等价**，按字面求值永远不会成立（除非三者序号相等）。**本表不替金标改写判据**：改写判据就是替金标做决定。"
+    },
+    {
+      "id": "AS-8",
+      "type": "prediction",
+      "claim": "风险预警在 P3 之前触发（「未然」的存在理由）",
+      "check": "warning_issued_at <= P2",
+      "verdict": "否决",
+      "trusted": true,
+      "no_trust_because": [],
+      "values": {
+        "warning_issued_at": 7,
+        "P2_round": 2,
+        "risk_alert_rounds": [
+          7
+        ]
+      },
+      "detail": "首个 `risk_alert` 在轮 7（0 基），金标要求 ≤ P2 那一轮（2） —— 晚了 5 轮。**注意别把这条与另一条混起来**：产出在 P2（轮 2）确实有一条 `polarization_surge`，而金标 `turning_point.detectable_signal` 说的正是「极化增速超过关注增速」；但 AS-8 判的是 `risk` **预警线**，不是这条信号。把两者混起来，一条否决会被读成通过。",
+      "tainted_by_railing": [],
+      "undecidable_because": null,
+      "to_make_decidable": null,
+      "definition_used": "**本表的定义**（金标只给了 `warning_issued_at` 一个名字，没给判据）：产出里首个 `risk_alert` 事件所在的轮。依据是引擎自己把这条事件的消息写成「风险越过预警线 0.70」（`world_state.WorldStateEngine.RISK_ALERT = 0.70`，判据是**穿越** `before < 0.70 <= after`）—— 这是产出里唯一自称「预警」的量。**换一个定义可以改变结论**，所以定义写在这里。",
+      "threshold_crossed": "risk(P3) >= 0.70 用的是同一个 0.70"
+    },
+    {
+      "id": "AS-9",
+      "type": "role",
+      "claim": "辅导员群体的角色冲突指标为全群体最高",
+      "check": "argmax_group(role_conflict) == 辅导员",
+      "verdict": "不可判定",
+      "trusted": null,
+      "no_trust_because": [],
+      "values": {},
+      "detail": "该指标**在代码里根本没有实现**，不是「这次没测到」。产出自己声明了这件事：「辅导员群体的角色冲突指标」—— 需要逐角色「公开立场 vs 私下立场」的情感极性差；当前产出里 `injected` 只存块摘要（sha1 前 12 位），不含立场文本。宁可空着，也不报一个编出来的数。",
+      "tainted_by_railing": [],
+      "undecidable_because": "缺逐条行为 → 角色的归属（产出里没有这个映射），以及该指标本身的实现",
+      "to_make_decidable": "需要逐角色「公开立场 vs 私下立场」的极性差。要判它，先得让产出落盘「哪一条行为出自哪个角色、立场是什么」—— 现在只有 actor id 与行为类别。**在实现出来之前，这一条不许被算成通过，也不许被算成失败。**"
+    },
+    {
+      "id": "AS-10",
+      "type": "counterfactual",
+      "claim": "若在 P2 主动公开分专业数据，P5 信任终值高于实际路径",
+      "check": "trust_branch(P5) > trust_actual(P5)",
+      "verdict": "否决",
+      "trusted": false,
+      "no_trust_because": [
+        "贴界"
+      ],
+      "values": {
+        "trust_branch(P5)": 0.0,
+        "trust_actual(P5)": 0.0,
+        "delta": 0.0
+      },
+      "detail": "分支 0.0000 对配对实际 0.0000 —— **两边都贴在 0.0 下界**，判据是 0.0000 > 0.0000。这条否决与它可能的「通过」一样没有内容：贴界把两个数都压到地板上，比较结果由夹逼决定。这一条与 AS-5 / AS-6 正好构成对偶 —— 那两条因贴界而「通过得毫无内容」，这一条因贴界而「否决得毫无内容」。**贴界对判据的破坏是双向的。**",
+      "tainted_by_railing": [
+        {
+          "dimension": "trust",
+          "round": 14,
+          "value": null
+        }
+      ],
+      "undecidable_because": null,
+      "to_make_decidable": null,
+      "branch_source": "`branch_a` / `actual_from_fork` 来自 `brief.build_windows` 的离线分支：同一个分叉点、同一批后续行为，只把那一轮的动作换成干预版。**agent 的反应不变** —— 所以它不是一次真正的反事实重跑，金标自己的 `note` 也写着「此项需要运行干预分支」。",
+      "gold_note": "此项需要运行干预分支，是「干预建议」功能的评测依据"
+    }
+  ],
+  "summary": {
+    "counts": {
+      "通过": 3,
+      "否决": 5,
+      "不可判定": 2
+    },
+    "total": 10,
+    "judged": 8,
+    "trusted_ids": [
+      "AS-1",
+      "AS-2",
+      "AS-3",
+      "AS-8"
+    ],
+    "not_trusted": [
+      {
+        "id": "AS-4",
+        "verdict": "否决",
+        "because": "贴界"
+      },
+      {
+        "id": "AS-5",
+        "verdict": "通过",
+        "because": "判据恒真、贴界"
+      },
+      {
+        "id": "AS-6",
+        "verdict": "通过",
+        "because": "贴界"
+      },
+      {
+        "id": "AS-10",
+        "verdict": "否决",
+        "because": "贴界"
+      }
+    ],
+    "one_defect_note": "**AS-2 / AS-3 / AS-4 / AS-8 四条否决指向同一条相位缺陷** —— 模型的状态峰值落在 P3 之后一到两轮（见 进度.md 的相位定案）。不要读成四个独立问题：它们是同一个成因的四个落点。AS-10 是另一件事（贴界 + 离线分支不是真反事实）。"
+  },
+  "_provenance": {
+    "rounds_file": "D:\\open_source\\weiran\\data\\simulation\\twitter_rounds.json",
+    "rounds_sha256": "ab4a3e0070a41aef",
+    "scenario_dir": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis",
+    "scenario_file": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis\\reference_data.json",
+    "scenario_sha256": "9f14e8578aa4bd45",
+    "command": "python -m weiran.gold_check"
+  }
+}
