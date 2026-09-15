@@ -190,6 +190,508 @@ def test_does_not_touch_unrelated_env():
             os.environ.pop("WEIRAN_SENTINEL", None)
 
 
+# -- 上下文截断监测 --------------------------------------------------------
+#
+# 守的是另一种「静默失效」，比上面那个 HF 的更难发现：camel 在 agent 记忆
+# 超限时会**丢弃旧记录**，只在日志里留一条 warning。agent 静默失忆之后，
+# 六维曲线照画、简报照出、测试照绿 —— 全场没有任何东西会红。
+#
+# 所以这里守三件事：
+#
+#   1. 真的截断了，**必须收到**（用真的 camel 截一次，不是自己 emit 一条假日志）。
+#   2. 没截断时**不许报**（否则「有截断」这个信号没有意义）。
+#   3. 格式读不懂时**不许静默当没发生**（否则监测退化成永远报平安）。
+
+import logging  # noqa: E402
+
+from weiran.simulate import (  # noqa: E402
+    TRUNCATION_MARKER,
+    TruncationWatch,
+    install_truncation_watch,
+    remove_truncation_watch,
+)
+
+
+@contextmanager
+def _watching():
+    """装一个干净的监听，退出时摘掉。**不做成全局 fixture** ——
+    泄漏的 handler 会让别的测试莫名其妙多收到事件。"""
+    watch = install_truncation_watch()
+    if watch.events:          # 上一个用例留下的，清掉
+        watch.events.clear()
+    try:
+        yield watch
+    finally:
+        remove_truncation_watch(watch)
+
+
+def _emit(msg: str, name: str = "camel.camel.memories.context_creators.score_based"):
+    """模拟 camel 打一条警告。**只用来测「没截断/读不懂」这两条** ——
+    测「真的截断了」用的是真 camel（见下一条）。"""
+    logging.getLogger(name).warning(msg)
+
+
+def test_watch_parses_a_real_truncation_message():
+    with _watching() as w:
+        _emit(f"{TRUNCATION_MARKER} before=9000, after=1200, limit=16384")
+        assert w.count == 1, w.events
+        assert w.events[0].before == 9000
+        assert w.events[0].after == 1200
+        assert w.events[0].limit == 16384
+        assert w.events[0].dropped == 7800
+        assert w.events[0].parsed
+
+
+def test_watch_is_silent_when_nothing_is_truncated():
+    """**第二条最容易被写漏。** 只测「能收到」的话，一个永远返回 True
+    的实现也能过 —— 而那种实现让「有截断」这个信号变得毫无意义。"""
+    with _watching() as w:
+        _emit("Some other camel warning entirely")
+        _emit("Context building finished normally")
+        assert w.count == 0, f"没截断却报了：{w.events}"
+
+
+def test_watch_counts_unparsed_instead_of_silently_ignoring():
+    """camel 改了格式 → 解析失败。**不许当没发生** —— 那会让监测从
+    「报了就是出事了」退化成「永远报平安」，恰是本项目最防的方向。"""
+    with _watching() as w:
+        _emit(f"{TRUNCATION_MARKER} before=?; after=?; limit=?")   # 读不懂
+        assert w.count == 1, "解析失败却当成没发生 —— 监测已不可信"
+        assert w.unparsed == 1
+        assert not w.events[0].parsed
+        assert w.limit is None
+
+
+def test_watch_is_idempotent():
+    """重复安装不叠加 handler —— 叠加会让同一次截断被数成 2 次、3 次。"""
+    first = install_truncation_watch()
+    try:
+        second = install_truncation_watch()
+        assert first is second
+        first.events.clear()
+        _emit(f"{TRUNCATION_MARKER} before=100, after=10, limit=50")
+        assert first.count == 1, f"叠加了 handler，数成了 {first.count} 次"
+    finally:
+        remove_truncation_watch(first)
+
+
+def test_watch_catches_both_possible_logger_names():
+    """真实名字是 `camel.camel.memories…`（上游 `get_logger` 无条件加前缀，
+    而模块 `__name__` 已含 `camel.`）。上游哪天修好这个，名字会变成
+    `camel.memories…`。**两个都必须收到** —— 否则上游一改，监测就悄悄失效。"""
+    with _watching() as w:
+        _emit(f"{TRUNCATION_MARKER} before=100, after=10, limit=50",
+              name="camel.camel.memories.context_creators.score_based")
+        _emit(f"{TRUNCATION_MARKER} before=200, after=20, limit=50",
+              name="camel.memories.context_creators.score_based")
+        assert w.count == 2, f"有一种命名收不到：{w.events}"
+
+
+def test_watch_reports_worst_by_dropped_tokens_not_by_count():
+    """`worst` 要按「丢了多少」取，不是按「第几次」。截断是丢多少出事。"""
+    with _watching() as w:
+        _emit(f"{TRUNCATION_MARKER} before=1000, after=900, limit=16384")
+        _emit(f"{TRUNCATION_MARKER} before=9000, after=100, limit=16384")
+        assert w.worst is not None and w.worst.dropped == 8900
+
+
+def test_the_watch_really_catches_a_real_camel_truncation():
+    """**这条是整套监测的地基。** 前面几条只证明「我们的 handler 能解析
+    我们造的字符串」—— 那测的是自己的解析器，不是 camel 真的会打这条日志。
+
+    所以这里**让 camel 真的截断一次**：造一个 token 上限很小的
+    `ScoreBasedContextCreator`，喂进远超上限的记录，断言我们收到了。
+
+    变异检验（已做过）：把 `TRUNCATION_MARKER` 改掉，本条必红 ——
+    说明它确实在测那条日志，不是在自我循环。
+
+    不 import oasis（只有 camel）。camel 与 oasis 是两回事：本项目必须
+    在切 HF 离线之前不碰的是 oasis/huggingface_hub，而 watch 本身
+    **连 camel 都不 import**，只装 handler。
+    """
+    try:
+        from camel.memories.context_creators.score_based import (
+            ScoreBasedContextCreator,
+        )
+        from camel.memories.records import ContextRecord, MemoryRecord
+        from camel.messages import BaseMessage
+        from camel.types import RoleType, UnifiedModelType
+        from camel.utils.token_counting import OpenAITokenCounter
+    except ImportError:  # pragma: no cover - 没装 camel 时跳过而非误报
+        print("      (跳过：未安装 camel-ai)")
+        return
+
+    def rec(text: str, score: float) -> "ContextRecord":
+        msg = BaseMessage(role_name="user", role_type=RoleType.USER,
+                          meta_dict={}, content=text)
+        return ContextRecord(
+            memory_record=MemoryRecord(message=msg, role_at_backend="user"),
+            score=score,
+        )
+
+    creator = ScoreBasedContextCreator(
+        OpenAITokenCounter(UnifiedModelType("gpt-4o-mini")), token_limit=300)
+
+    with _watching() as w:
+        records = [rec("系统提示", 1.0)]
+        records += [rec(f"msg{i} " + "y" * 200, 0.1) for i in range(40)]
+        creator.create_context(records)
+        assert w.count >= 1, (
+            "camel 真的截断了，我们却没收到 —— 上下限监控是空转的"
+            "（可能 camel 换了 logger 名或改了警告格式）")
+        assert w.unparsed == 0, f"收到了但解析不了，格式变了：{w.events}"
+        assert w.worst is not None and w.worst.dropped > 0
+        assert w.limit == 300, f"上限读错了：{w.limit}"
+
+
+def test_the_watch_is_silent_on_a_real_camel_run_within_limit():
+    """反向：**上限够大时 camel 不截断，我们也不许报。**
+    只测「截断能收到」的话，一个永远报「截断了」的实现也能过。"""
+    try:
+        from camel.memories.context_creators.score_based import (
+            ScoreBasedContextCreator,
+        )
+        from camel.memories.records import ContextRecord, MemoryRecord
+        from camel.messages import BaseMessage
+        from camel.types import RoleType, UnifiedModelType
+        from camel.utils.token_counting import OpenAITokenCounter
+    except ImportError:  # pragma: no cover
+        print("      (跳过：未安装 camel-ai)")
+        return
+
+    msg = BaseMessage(role_name="user", role_type=RoleType.USER,
+                      meta_dict={}, content="很短的一句话")
+    record = ContextRecord(
+        memory_record=MemoryRecord(message=msg, role_at_backend="user"),
+        score=1.0,
+    )
+    creator = ScoreBasedContextCreator(
+        OpenAITokenCounter(UnifiedModelType("gpt-4o-mini")), token_limit=100_000)
+
+    with _watching() as w:
+        creator.create_context([record])
+        assert w.count == 0, f"远未超限却报了截断：{w.events}"
+
+
+# ---------------------------------------------------------------------------
+# 切片护栏。**这一组守的是一个第三方库的退化行为**，所以要三件东西齐全：
+# 造得出那个退化（复现缺陷）、拦得住（我们的修法）、不误伤（自己超上限的还得切）。
+# 只测后两件的话，一个「永远不切」的实现也能全绿。
+# ---------------------------------------------------------------------------
+
+def _camel_pieces():
+    """camel 的那几个零件。**没装就返回 None**，与上面几条 camel 测试一致。"""
+    try:
+        from camel.agents.chat_agent import ChatAgent
+        from camel.memories.agent_memories import ChatHistoryMemory
+        from camel.memories.context_creators.score_based import (
+            ScoreBasedContextCreator,
+        )
+        from camel.types import RoleType, UnifiedModelType
+        from camel.utils.token_counting import OpenAITokenCounter
+        from camel.memories.records import MemoryRecord
+        from camel.messages import BaseMessage
+    except ImportError:  # pragma: no cover - 没装 camel 时跳过而非误报
+        return None
+    return (ChatAgent, ChatHistoryMemory, ScoreBasedContextCreator,
+            OpenAITokenCounter, UnifiedModelType, RoleType, BaseMessage,
+            MemoryRecord)
+
+
+def _bare_agent(token_limit: int):
+    """造一个**只带记忆、不带模型**的 ChatAgent。不发 LLM、不联网。
+
+    用 `__new__` 绕过 `__init__`：真造一个要模型后端，而这里要测的是
+    `update_memory` 的写入决策，与模型无关。`update_memory` 用到的只有
+    `memory`、`agent_id` 两个属性。
+    """
+    parts = _camel_pieces()
+    if parts is None:
+        return None
+    (ChatAgent, ChatHistoryMemory, ScoreBasedContextCreator,
+     OpenAITokenCounter, UnifiedModelType, _RoleType, _BaseMessage,
+     _MemoryRecord) = parts
+
+    creator = ScoreBasedContextCreator(
+        OpenAITokenCounter(UnifiedModelType("gpt-4o-mini")),
+        token_limit=token_limit,
+    )
+    agent = ChatAgent.__new__(ChatAgent)
+    agent.agent_id = "probe"
+    # `memory` 是个 setter，赋值时会调 `init_messages()`，而它要读
+    # `_system_message`（`__new__` 绕过了 `__init__`，这个属性还不存在）。
+    agent._system_message = None
+    agent.memory = ChatHistoryMemory(context_creator=creator)
+    return agent, creator
+
+
+def _fill_until_truncating(agent, creator, filler_tokens: int = 400):
+    """把记忆灌到**截断已经启动**为止 —— 也就是「预算归零」那个状态。
+
+    这正是实测里发生退化的前提条件（3 agent 跑到 R9 起）。
+    """
+    from camel.messages import BaseMessage
+    from camel.types import OpenAIBackendRole
+
+    msg = BaseMessage.make_user_message(
+        role_name="User", content="填 " + "x" * (filler_tokens * 3))
+    per = creator.token_counter.count_tokens_from_messages(
+        [msg.to_openai_message(OpenAIBackendRole.USER)])
+    n = 0
+    while True:
+        agent.update_memory(msg, OpenAIBackendRole.USER)
+        n += 1
+        records = agent.memory.retrieve()
+        raw = sum(creator.token_counter.count_tokens_from_messages(
+            [r.memory_record.to_openai_message()]) for r in records)
+        if raw > creator.token_limit and n >= 3:
+            return n, per, raw
+
+
+def test_camel_shreds_a_fitting_message_once_the_budget_is_gone():
+    """**先把缺陷复现出来，再谈修法。** 不改任何东西。
+
+    实测形态：记忆一装满、截断一启动，`remaining_budget` 就归零，
+    camel 的 `update_memory` 于是把**一条远远塞得下的消息**切成
+    「一块一个 token」（`base_chunk_size = max(1, 0)//10 = 0`
+    → `chunk_body_limit = max(1, 0-前缀) = 1`），每块还各带一个
+    `[chunk i/N of a long message]` 前缀。
+
+    真实规模下这条让记忆里的记录数从 83 涨到 11798、总量 26 万 token。
+    这条测试是那个现象的**缩小版**：上限 300、灌满、再写一条 60 token 的消息。
+    """
+    made = _bare_agent(token_limit=300)
+    if made is None:
+        print("      (跳过：未安装 camel-ai)")
+        return
+    agent, creator = made
+    from camel.messages import BaseMessage
+    from camel.types import OpenAIBackendRole
+
+    _fill_until_truncating(agent, creator)
+
+    small = BaseMessage.make_user_message(
+        role_name="User", content="这是一条很短的消息。" * 5)
+    own = creator.token_counter.count_tokens_from_messages(
+        [small.to_openai_message(OpenAIBackendRole.USER)])
+    assert own < creator.token_limit, "构造失败：这条消息本该远小于上限"
+
+    before = len(agent.memory.retrieve())
+    agent.update_memory(small, OpenAIBackendRole.USER)
+    added = len(agent.memory.retrieve()) - before
+
+    assert added > 1, (
+        "camel 没有切 —— 那这条测试守的现象在本次 camel 版本上不存在，"
+        "护栏也就没有存在理由，先查 camel 版本再决定要不要留它")
+    tails = [r.memory_record.message.content for r in agent.memory.retrieve()[-3:]]
+    assert any("[chunk" in (c or "") for c in tails), (
+        f"加了 {added} 条，但没看到切片前缀：{tails}")
+
+
+def test_guard_writes_a_fitting_message_whole_instead_of_shredding_it():
+    """修法生效：同样那条 60 token 的消息，**只增加 1 条记录、内容是完整的**。"""
+    made = _bare_agent(token_limit=300)
+    if made is None:
+        print("      (跳过：未安装 camel-ai)")
+        return
+    agent, creator = made
+    from camel.messages import BaseMessage
+    from camel.types import OpenAIBackendRole
+
+    from weiran.simulate import install_chunking_guard, remove_chunking_guard
+
+    install_chunking_guard()
+    try:
+        _fill_until_truncating(agent, creator)
+        guard = install_chunking_guard()
+        written_before, sliced_before = guard.written_whole, guard.still_sliced
+
+        small = BaseMessage.make_user_message(
+            role_name="User", content="这是一条很短的消息。" * 5)
+        before = len(agent.memory.retrieve())
+        agent.update_memory(small, OpenAIBackendRole.USER)
+        added = len(agent.memory.retrieve()) - before
+        last = agent.memory.retrieve()[-1].memory_record.message.content
+
+        assert added == 1, f"护栏没拦住，仍然写进了 {added} 条"
+        assert "[chunk" not in last, f"内容仍被切碎：{last[:80]}"
+        assert guard.written_whole == written_before + 1
+        assert guard.still_sliced == sliced_before
+    finally:
+        remove_chunking_guard()
+
+
+def test_guard_still_slices_a_message_that_is_itself_over_the_limit():
+    """**反向，这条是护栏的刹车。** 一条**自己就超上限**的消息必须照切 ——
+    不切的话它谁也装不进去（截断要保最新，而它比整个窗口还大），
+    camel 会直接抛 RuntimeError。
+
+    只测「不切」的话，一个「永远不切」的实现也能全绿。
+    """
+    made = _bare_agent(token_limit=300)
+    if made is None:
+        print("      (跳过：未安装 camel-ai)")
+        return
+    agent, creator = made
+    from camel.messages import BaseMessage
+    from camel.types import OpenAIBackendRole
+
+    from weiran.simulate import install_chunking_guard, remove_chunking_guard
+
+    install_chunking_guard()
+    try:
+        guard = install_chunking_guard()
+        written_before, sliced_before = guard.written_whole, guard.still_sliced
+
+        huge = BaseMessage.make_user_message(
+            role_name="User", content="超 " + "z" * 3000)
+        own = creator.token_counter.count_tokens_from_messages(
+            [huge.to_openai_message(OpenAIBackendRole.USER)])
+        assert own > creator.token_limit, "构造失败：这条消息本该自己就超上限"
+
+        before = len(agent.memory.retrieve())
+        agent.update_memory(huge, OpenAIBackendRole.USER)
+        added = len(agent.memory.retrieve()) - before
+
+        assert added > 1, f"自己超上限的消息没被切，仍写成 {added} 条"
+        assert guard.still_sliced == sliced_before + 1
+        assert guard.written_whole == written_before, "不该由护栏写它"
+    finally:
+        remove_chunking_guard()
+
+
+def test_guard_is_idempotent_and_removable():
+    """装两次是同一个、摘掉之后**类上必须还原成原方法**。
+
+    不还原的话，后面所有测试（乃至同一进程里的下一次运行）都在一个
+    被改过的 camel 上跑，而没人知道。
+    """
+    parts = _camel_pieces()
+    if parts is None:
+        print("      (跳过：未安装 camel-ai)")
+        return
+    ChatAgent = parts[0]
+    from weiran.simulate import install_chunking_guard, remove_chunking_guard
+
+    original = ChatAgent.update_memory
+    try:
+        g1 = install_chunking_guard()
+        g2 = install_chunking_guard()
+        assert g1 is g2, "装两次拿到了两个护栏"
+        assert ChatAgent.update_memory is not original, "装了却没换上去"
+        assert g1.original is original
+    finally:
+        remove_chunking_guard()
+    assert ChatAgent.update_memory is original, "摘掉之后没还原"
+    remove_chunking_guard()  # 再摘一次不许炸
+
+
+def test_guard_keeps_its_own_timestamps_out_of_the_tool_call_window():
+    """护栏自己写记录时，时间戳必须**跨出 camel 给回执留的那扇门**。
+
+    这扇门有多窄：`_record_tool_calling` 用 `base + 1e-6` 排「请求 → 回执」，
+    而这条写入路径的时钟分辨率约 1ms，所以那是一微秒宽的一条缝。紧跟着的
+    那条记录（`_record_final_output` 写的终稿）只要自己的读数落进缝里，
+    排序键 `(timestamp, -score)` 就排出「请求 → 终稿 → 回执」，端点回 400
+    `insufficient tool messages following tool_calls message`，而 OASIS 只记
+    一行 error 继续跑 —— **该 agent 这一轮的动作整条消失**。
+
+    实测（12 agent × 3 轮，见 `_weiran_decay/epsilon_window.py`）：护栏开时
+    27 个配对里 6 个落进缝里、正好 6 次 400，逐请求 1:1、零反例；护栏关时
+    0/30，终稿与请求的最小间隔 9.956e-04（≈整整一拍，够不到缝）。护栏不是
+    缺陷的来源 —— 它是那扇门唯一的把手：写入够快才够得到，而它就是要让
+    写入变快。
+
+    **这条测试不是恒真的**：它把时钟**钉死在缝里**（终稿那次读数取
+    `base + 5e-7`），也就是把现实中约 22% 概率的那一拍变成必然 —— 旧实现
+    下它必然失败（同一构造单独跑过，给的就是「请求 → 终稿 → 回执」）；
+    修完终稿被推到至少 `base + 1e-3`，缝够不着。
+
+    判据用**现象**（组装出来的上下文里请求与回执必须相邻），不用时间戳本身：
+    时间戳是手段，端点拒的是那个形状。
+    """
+    import time as _time
+
+    made = _bare_agent(token_limit=4000)
+    if made is None:
+        print("      (跳过：未安装 camel-ai)")
+        return
+    agent, creator = made
+
+    from camel.messages import BaseMessage, FunctionCallingMessage
+    from camel.types import OpenAIBackendRole, RoleType
+
+    from weiran.simulate import install_chunking_guard, remove_chunking_guard
+
+    base = 1_789_470_229.0
+    clock = {"t": base}
+    real_time_ns = _time.time_ns
+    _time.time_ns = lambda: int(clock["t"] * 1e9)   # 假钟：把那一拍钉死
+    install_chunking_guard()
+    guard = install_chunking_guard()
+    pushed_before = guard.timestamp_pushed
+    try:
+        agent.update_memory(
+            BaseMessage.make_user_message(role_name="User", content="第 0 轮态势"),
+            OpenAIBackendRole.USER)
+        tid = "call_00_WINDOW"
+        agent.update_memory(
+            FunctionCallingMessage(
+                role_name="assistant", role_type=RoleType.ASSISTANT,
+                meta_dict=None, content="", func_name="like_post",
+                args={"post_id": 3}, tool_call_id=tid),
+            OpenAIBackendRole.ASSISTANT, timestamp=base)
+        agent.update_memory(
+            FunctionCallingMessage(
+                role_name="assistant", role_type=RoleType.ASSISTANT,
+                meta_dict=None, content="", func_name="like_post",
+                result="{'success': True}", tool_call_id=tid),
+            OpenAIBackendRole.FUNCTION, timestamp=base + 1e-6)
+        # 最坏情形：终稿这次读数落在 (base, base + 1e-6) 里面
+        clock["t"] = base + 5e-7
+        agent.update_memory(
+            BaseMessage(role_name="assistant", role_type=RoleType.ASSISTANT,
+                        meta_dict=None, content=""),
+            OpenAIBackendRole.ASSISTANT)
+        # 计数器要在**摘护栏之前**读：`remove_chunking_guard` 会把它清零，
+        # 在 finally 之后读就永远是 0（第一版就是这么写的，于是这条断言恒假）。
+        pushed_after = guard.timestamp_pushed
+    finally:
+        _time.time_ns = real_time_ns
+        remove_chunking_guard()
+
+    messages, _ = creator.create_context(agent.memory.retrieve())
+    shape = []
+    for m in messages:
+        if m.get("tool_calls"):
+            shape.append("assistant(tool_calls)")
+        elif m.get("role") == "tool":
+            shape.append("tool")
+        elif m.get("role") == "assistant" and not (m.get("content") or "").strip():
+            shape.append("assistant(空)")
+        else:
+            shape.append(m.get("role"))
+
+    at = shape.index("assistant(tool_calls)")
+    assert shape[at + 1] == "tool", (
+        f"请求与回执之间被插了东西：{shape} —— 端点会回 400，"
+        "这一轮该 agent 的动作整条丢失")
+    assert pushed_after > pushed_before, (
+        "时间戳一次都没被推进 —— 这条臂是空的，它证明不了任何事")
+
+
+def test_guard_is_off_by_default():
+    """**默认关闭必须机检。** 它改的是第三方库的写入行为、会让曲线换一条口径；
+    「默认是开的」这件事如果只写在注释里，某次重构把它翻过来谁也不会发现。
+    """
+    import inspect
+
+    from weiran.simulate import _run
+
+    default = inspect.signature(_run).parameters["chunking_guard"].default
+    assert default is False, f"切片护栏默认值变成了 {default!r}"
+
+
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:

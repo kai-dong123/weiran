@@ -27,7 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from weiran.perception import (  # noqa: E402
     DIRECTION_ZH, FORBIDDEN, INJECT_ATTR, ActorKnowledge, KnowledgeError,
     Phase, active_phase_by_round, build_block, days_per_round,
-    inject_round_context, knowledge_cutoff_by_round, load_knowledge,
+    event_schedule, inject_round_context, knowledge_cutoff_by_round,
+    load_events, load_knowledge,
     load_phases, phase_schedule, render_knowledge, render_state, tier_of,
 )
 from weiran.world_state import DIMENSION_ZH, DIMENSIONS, WorldState  # noqa: E402
@@ -431,6 +432,133 @@ def test_active_phase_accepts_unsorted_phases():
     label = active_phase_by_round(phases, rounds=9, dpr=1.0)
     assert label[0] == "P1" and label[3] == "P2" and label[8] == "P3", \
         f"乱序输入被判错了：{label}"
+
+
+# ---------------------------------------------------------------------------
+# event_order -> 轮号（与 phases 并列的第二条注入源）
+
+def test_event_order_is_real_data_and_was_not_being_read():
+    """先钉住数据本身。**这一段测的是一条一直没被读过的金标数据**：
+
+    金标写了 17 条带日期的事件明细，而注入只用 `phases` 那 5 条概括 trigger。
+    「金标说那天发生的事」与「仿真里那天发生的事」因此差了 12 条，
+    而且不报错、不提示 —— 场景再稀也照样跑完。
+    """
+    events = load_events(SCENARIO)
+    assert len(events) == 17, f"event_order 条数与金标不一致：{len(events)}"
+    assert [e.day for e in events] == [
+        0, 0, 0, 2, 2, 2, 4, 5, 5, 5, 6, 8, 8, 8, 13, 14, 28], \
+        f"事件日期与金标不一致：{[e.day for e in events]}"
+    assert [e.seq for e in events] == list(range(1, 18)), "seq 乱了"
+
+
+def test_event_phase_attribution_is_by_upper_bound():
+    """`phase_id` 不是金标给的，是按天推出的**上界**归属。
+
+    这条与 `active_phase_by_round` 必须同语义，否则同一个日子会在
+    「注入标签」和「阶段标签」里落到不同阶段 —— 两个都会落盘，
+    日后对不上会看起来像数据坏了。
+    """
+    events = load_events(SCENARIO)
+    owner = {e.seq: e.phase_id for e in events}
+    # day 0/2 → P1/P2；day 4 尚未到 P3（day 5），仍属 P2 —— 上界语义的关键一格
+    assert owner[1] == "P1", owner[1]
+    assert owner[4] == "P2", owner[4]
+    assert owner[7] == "P2", f"day 4 的事件应属 P2（P3 在 day 5）：{owner[7]}"
+    assert owner[8] == "P3", owner[8]
+    assert owner[14] == "P4", f"day 8 的事件应属 P4：{owner[14]}"
+    assert owner[15] == "P4", f"day 13 的事件应属 P4（P5 在 day 14）：{owner[15]}"
+    assert owner[16] == "P5", owner[16]
+
+
+def test_event_schedule_fills_more_rounds_than_phases():
+    """**这一段是那个实测问题的量化。**
+
+    轮=天时 phases 只落在 5 个轮上（0/2/5/8/14），event_order 落在 8 个轮上。
+    写死这组数是为了让「加密到什么程度」这件事有个可核对的基准 ——
+    以及把**它做不到的那件事**记在测试里：9–12 仍是空档，
+    因为金标 day 9–12 本来就没有事件。
+    """
+    phases = load_phases(SCENARIO)
+    events = load_events(SCENARIO)
+    ev_sched, outside = event_schedule(events, phases, rounds=15)
+
+    assert sorted(ev_sched) == [0, 2, 4, 5, 6, 8, 13, 14], \
+        f"event_order 的注入轮与预期不符：{sorted(ev_sched)}"
+    ph_sched, _, _ = phase_schedule(phases, rounds=15)
+    assert sorted(ph_sched) == [0, 2, 5, 8, 14]
+    assert len(ev_sched) == 8 > len(ph_sched) == 5, "event_order 该比 phases 铺得开"
+
+    # 洞从 5 轮缩到 4 轮，**但没有堵上** —— 这是金标事实，不是没做够。
+    holes = [r for r in range(15) if r not in ev_sched]
+    assert holes == [1, 3, 7, 9, 10, 11, 12], f"空档与预期不符：{holes}"
+    assert 9 in holes and 12 in holes, \
+        "9–12 应当仍是空档（金标 day 9–12 无事件）—— 若这条红了，" \
+        "说明有人往金标里加了事件，那是改场景不是改注入"
+
+    # day 28 的收尾事件在 15 轮窗口外，必须被**报出来**而不是静默丢。
+    assert [e.seq for e in outside] == [17], \
+        f"窗口外事件应恰为 seq 17（day 28）：{[e.seq for e in outside]}"
+    assert all(e.day < 28 for r in ev_sched for e in ev_sched[r])
+
+
+def test_event_round_span_comes_from_phases_not_events():
+    """**这一条守的是一个会把整条曲线改掉的坑。**
+
+    `days_per_round` 按「末阶段 day + 1」判压缩（span=14 → 15 轮是 round=day）。
+    `event_order` 里有一条 day 28 —— 若拿事件表算跨度，同样的 15 轮会被判成
+    压缩模式（每轮 2 天），激励项从「按 15 步累加」变成「按 8 步累加」，
+    **曲线整体变形，而变形的原因藏在数据里、从输出上看不出来**。
+    """
+    phases = load_phases(SCENARIO)
+    events = load_events(SCENARIO)
+    assert max(e.day for e in events) == 28, "金标里确实有 day 28 的事件"
+
+    dpr_phases, compressed = days_per_round(phases, rounds=15)
+    assert (dpr_phases, compressed) == (1.0, False), \
+        "15 轮覆盖 14 天必须是 round=day，不能被事件表带偏"
+
+    # event_schedule 只吃 phases 的跨度：它自己不返回 dpr，但注入轮必须
+    # 落在 day 上（dpr=1.0 的指纹）—— 若是按 2 天/轮，day 13 的事件会挤到轮 6。
+    ev_sched, _ = event_schedule(events, phases, rounds=15)
+    assert 13 in ev_sched and 14 in ev_sched, \
+        f"day 13/14 的事件没有落在各自那一轮，说明轮-天映射被事件表带偏：{sorted(ev_sched)}"
+
+
+def test_event_schedule_never_silently_drops_data():
+    """窗口内的事件**一条都不许丢** —— 与阶段表同一条纪律。"""
+    phases = load_phases(SCENARIO)
+    events = load_events(SCENARIO)
+    for rounds in (15, 8, 5, 3):
+        sched, outside = event_schedule(events, phases, rounds=rounds)
+        got = sorted(e.seq for r in sched for e in sched[r])
+        want = sorted(e.seq for e in events if e.day < rounds * _dpr(phases, rounds))
+        assert got == want, f"rounds={rounds} 时事件丢了或重了：{got} != {want}"
+        assert max(sched) <= rounds - 1, f"rounds={rounds} 时轮号越界"
+
+
+def _dpr(phases, rounds: int) -> float:
+    return days_per_round(phases, rounds)[0]
+
+
+def test_load_events_rejects_a_scenario_without_an_event_order():
+    """没有 event_order 段时必须**报错**，而不是返回空表。
+
+    返回空表的话，调用方会得到「一个事件都不注入」的推演 —— 一条正常的
+    空曲线，没有任何地方提示场景其实缺了日程。
+    """
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        raw = json.loads((SCENARIO / "reference_data.json").read_text(encoding="utf-8"))
+        raw.pop("event_order", None)
+        (d / "reference_data.json").write_text(
+            json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        try:
+            load_events(d)
+        except KnowledgeError as exc:
+            assert "event_order" in str(exc), exc
+        else:
+            raise AssertionError("缺 event_order 段却没有报错")
 
 
 # ---------------------------------------------------------------------------

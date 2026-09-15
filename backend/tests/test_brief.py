@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -69,18 +70,30 @@ def _gold(n: int = 5) -> dict:
 
 
 def _rounds(n_rounds: int = 3, *, phases_on: bool = True, dpr: float = 7.0,
-            behaviors: list[list[str]] | None = None) -> dict:
+            behaviors: list[list[str]] | None = None,
+            actions: list[list[dict]] | None = None) -> dict:
     """合成一份推演产出 —— **用真引擎跑出来**，不是手编数字。
 
     手编 `state` 的话，`replay_deviation` 会立刻报「这份产出不是本引擎产生的」，
     那反而说明检查有效 —— 但测试要测的是别的东西，所以这里如实跑一遍。
+
+    `actions` 与 `behaviors` 是两件事，**故意分开传**：`behaviors` 是喂进引擎的
+    信号（本例里手写），`actions` 是 OASIS 那一轮真实产生的动作（用来验
+    「其中发声」那一列怎么算）。默认给空列表 —— 与老产出一致。
     """
     engine = WorldStateEngine()
-    behaviors = behaviors or [
-        ["disclosure", "amplification", "discussion", "discussion"],
-        ["suppression", "amplification", "discussion", "discussion"],
-        ["disclosure", "discussion"],
-    ][:n_rounds]
+    if behaviors is None:
+        # **必须循环补齐到 `n_rounds` 条。** 原先写的是 `[...][:n_rounds]`，
+        # 而默认列表只有 3 条 —— 于是 `_rounds(n_rounds=5)` **静默地只产出
+        # 3 轮**，调用方拿到的轮数比要的少，没有任何提示。
+        # 写新用例时踩到过一次（断言 5 行、实得 3 行）。夹具自己犯静默短缺，
+        # 是这个项目最不该有的东西。
+        _pattern = [
+            ["disclosure", "amplification", "discussion", "discussion"],
+            ["suppression", "amplification", "discussion", "discussion"],
+            ["disclosure", "discussion"],
+        ]
+        behaviors = [_pattern[i % len(_pattern)] for i in range(n_rounds)]
     phase_ids = (["P1,P2", "P3,P4", "P5"] if n_rounds == 3 else
                  [f"P{i + 1}" for i in range(n_rounds)]) if phases_on else \
         ["" for _ in range(n_rounds)]
@@ -95,7 +108,9 @@ def _rounds(n_rounds: int = 3, *, phases_on: bool = True, dpr: float = 7.0,
             "prompt_tokens": 1000, "completion_tokens": 100,
             "phase_id": phase_ids[i], "injected": {"a": "x"},
             "injection_sample": "", "behaviors": beh,
-            "state": cur.as_dict(), "actions": [], "errors": 0,
+            "state": cur.as_dict(),
+            "actions": (actions[i] if actions and i < len(actions) else []),
+            "errors": 0,
         })
     return {
         "meta": {
@@ -105,6 +120,11 @@ def _rounds(n_rounds: int = 3, *, phases_on: bool = True, dpr: float = 7.0,
             "phases_on": phases_on, "knowledge_on": True, "feedback_on": True,
             "world_state": True, "total_seconds": 6.0,
             "total_actions": sum(len(r["behaviors"]) for r in out),
+            # 上下文压力。**与 simulate 现在真的写出去的字段一致** ——
+            # 夹具少写字段的话，「字段缺失」那条降级会**永远**出现在每个用例里，
+            # 而它本意是只在读旧产出时才出现。
+            "context_limit": 16384, "truncations": 0,
+            "truncation_unparsed": 0, "truncation_worst_dropped": 0,
         },
         "rounds": out,
         "_provenance": {"rounds_file": "<合成>", "rounds_sha256": "0" * 16},
@@ -229,6 +249,126 @@ def test_compressed_declaration_follows_meta():
     b2 = _build(_rounds(dpr=7.0))
     assert B.MARKERS["compressed"] in B.render_markdown(b2), \
         "压缩产出没印压缩声明"
+
+
+def test_context_declaration_distinguishes_three_states():
+    """上下文压力那一句有**三种**状态，一个都不许合并。
+
+    合并的代价是实打实的：把「没记录」并进「没截断」，等于把「不知道」
+    伪装成「没问题」；而「没截断」正是本项目要求**主动说出来**的结论
+    —— 它和「没在数」在文件里长得一模一样。
+    """
+    # 1) 记录到 0 次 —— 必须**主动断言**没截断
+    b0 = _build()
+    md0 = B.render_markdown(b0)
+    assert "全程未发生记忆截断" in md0, "0 次的产出没有主动断言「没发生」"
+    assert not [d for d in b0["degradations"] if d["kind"] == "truncated"], \
+        "0 次截断不该报降级"
+
+    # 2) 记录到 >0 次 —— 必须报降级，且说清丢了多少
+    rd = _rounds()
+    rd["meta"].update(truncations=3, truncation_worst_dropped=5000)
+    b1 = _build(rd)
+    md1 = B.render_markdown(b1)
+    assert "全程发生 3 次记忆截断" in md1, md1[:400]
+    assert "5000" in md1
+    assert "全程未发生记忆截断" not in md1, \
+        "有截断却仍印「未发生」—— 这是最坏的一种错"
+    kinds = [d["kind"] for d in b1["degradations"]]
+    assert "truncated" in kinds, f"有截断却没报降级：{kinds}"
+    assert B.check_brief(b1, md1) == [], B.check_brief(b1, md1)
+
+    # 3) **压根没有这个字段** —— 必须说「没测」，不许默默按 0 处理
+    rd2 = _rounds()
+    for k in ("context_limit", "truncations", "truncation_unparsed",
+              "truncation_worst_dropped"):
+        rd2["meta"].pop(k)
+    b2 = _build(rd2)
+    md2 = B.render_markdown(b2)
+    assert "这一项本次没有记录" in md2, md2[:400]
+    assert "全程未发生记忆截断" not in md2, \
+        "没有记录却宣称「未发生」—— 把「不知道」当成了「没问题」"
+    kinds2 = [d["kind"] for d in b2["degradations"]]
+    assert "no_context_record" in kinds2, f"旧产出没报降级：{kinds2}"
+
+
+def test_context_check_is_not_vacuous():
+    """**一个永远印「未发生截断」的实现必须被拦下。**
+
+    光检查标记在场是不够的 —— 那种实现照样能让「标记在场」这条通过，
+    而它的全部效果就是把监测变成一句口头禅。
+    """
+    rd = _rounds()
+    rd["meta"].update(truncations=7, truncation_worst_dropped=9000)
+    b = _build(rd)
+    md = B.render_markdown(b)
+
+    # 把那段换成「没截断」的说法，其余原样 —— 机检必须报出来
+    healthy = B._context_line({**rd["meta"], "truncations": 0,
+                               "truncation_worst_dropped": 0})
+    sick = B._context_line(rd["meta"])
+    tampered = md.replace(sick, healthy)
+    assert tampered != md, "正文里找不到那段，无从篡改"
+    bad = B.check_brief(b, tampered)
+    assert bad, "meta 说截断了 7 次，正文说「未发生」，机检竟然通过了"
+    assert any("截断" in msg for msg in bad), bad
+
+
+def test_context_declaration_is_enforced_by_marker_check():
+    """标记必须无条件在场 —— 抠掉它，机检要报。"""
+    b = _build()
+    md = B.render_markdown(b)
+    broken = md.replace(B.MARKERS["context"], "")
+    assert broken != md, "标记在正文里根本不存在"
+    assert B.check_brief(b, broken), "抠掉上下文标记之后机检竟然还通过"
+
+
+def test_truncation_reports_how_little_survives_not_just_how_much_was_lost():
+    """丢弃量必须换算成**保留比例** —— 否则读者判断不出量级。
+
+    「单次最多丢弃 1,234,443 token」读起来只是个大数；
+    配上「上限 16384」读者仍要自己做除法，而做不做、做对没有，无从保证。
+    换成「能看到的记忆不超过自己的 1.31%」才有量级。
+    """
+    # 上界公式：after/(after+dropped) ≤ limit/(limit+dropped)
+    assert abs(B._visible_fraction(16_384, 1_234_443) - 16_384 / 1_250_827) < 1e-12
+    assert 0.0130 < B._visible_fraction(16_384, 1_234_443) < 0.0132
+
+    # 丢得越多，能看到的越少 —— 单调，且恒在 (0, 1]
+    fr = [B._visible_fraction(1000, d) for d in (0, 1, 100, 10_000)]
+    assert fr[0] is None, "丢弃量为 0 时没有「最坏那一次」，不许编一个比例"
+    assert all(0.0 < x <= 1.0 for x in fr[1:])
+    assert fr[1] > fr[2] > fr[3]
+
+    # 算不出来就返回空串 —— 不许退化成「100%」那种看着没问题的数
+    assert B._visible_sentence(0, 500) == ""
+    assert B._visible_sentence(1000, 0) == ""
+
+    # 端到端：这句必须真的进正文，且两个出口（正文 + 降级表）都要有
+    rd = _rounds()
+    rd["meta"].update(context_limit=16_384, truncations=117,
+                      truncation_worst_dropped=1_234_443)
+    b = _build(rd)
+    md = B.render_markdown(b)
+    assert "1.31%" in md, "正文里没有把丢弃量换算成保留比例"
+    assert "75 倍" in md, "没有把丢弃量与窗口上限的比例说出来"
+    deg = [d for d in b["degradations"] if d["kind"] == "truncated"]
+    assert deg and "1.31%" in deg[0]["text"], \
+        f"正文有、降级表没有，两处口径不一致：{deg}"
+    assert B.check_brief(b, md) == [], B.check_brief(b, md)
+
+
+def test_visible_fraction_is_not_vacuous():
+    """**一个恒返回 100% 的实现必须被拦下。**
+
+    这是本项唯一的失效模式：公式写错一个符号，比例就恒等于 1，
+    而正文照样印得出「不超过自己的 100.00%」—— 看着像句人话，
+    实际把「丢了九成九」说成了「没丢」。
+    """
+    assert B._visible_fraction(16_384, 1_234_443) < 0.05, \
+        "丢 123 万 token 还报出 ≥5% 的可见比例，公式反了"
+    # 上限的代价随丢弃量单调收紧 —— 一个恒定实现过不了这一条
+    assert B._visible_fraction(100, 900) < B._visible_fraction(100, 100)
 
 
 def test_banned_words_rejected():
@@ -675,6 +815,203 @@ def test_real_run_output_is_current():
     rebuilt = B.build_brief(rd, gd, command=stored["provenance"]["command"])
     assert B.render_markdown(rebuilt) == fresh_md, \
         "落盘的 brief.json 不是当前代码从这份产出重算出来的结果"
+
+
+# ---------------------------------------------------------------------------
+# 10. 证据量：每一轮的状态是拿几条行为算出来的
+# ---------------------------------------------------------------------------
+#
+# 守的失效模式：**状态看着有两个小数位、很精确，背后其实只有两三条行为。**
+# 27 agent × 15 轮实测里轮 0 有 21 条进入引擎、轮 14 只剩 3 条，而此前的产出
+# 里没有任何字段能区分这两者 —— 落盘之后一模一样。
+
+def _railed_doc(n_rounds: int = 5) -> dict:
+    """造一份**有维度贴到夹逼边界**的产出。
+
+    每轮 30 条同向行为、`dt=1`：trust 的半衰期 14 天，弛豫每轮只拉回 4.8%，
+    而激励每轮推 0.45 —— 两三轮就顶到 0.0 被 `_clamp` 夹住。
+    """
+    return _rounds(n_rounds=n_rounds, dpr=1.0,
+                   behaviors=[["suppression"] * 30] * n_rounds)
+
+
+def test_volume_is_recomputed_from_the_engines_own_constant():
+    """`volume` 必须是 `tanh(n / VOLUME_REF)` 的复算，**不是本文另定的阈值**。
+
+    若哪天有人把 `VOLUME_REF` 改了而这里没跟着走，这条会红 ——
+    那正是我们想知道的：引擎的声势尺度变了，简报里的解释也要重写。
+    """
+    rd = _rounds(n_rounds=5, dpr=1.0)
+    b = _build(rd)
+    for row in b["evidence"]["rows"]:
+        want = round(math.tanh(row["n_behaviors"] / B.VOLUME_REF), 4)
+        assert row["volume"] == want, (
+            f"R{row['round']} 的 volume {row['volume']} != "
+            f"tanh({row['n_behaviors']}/{B.VOLUME_REF}) = {want}")
+
+
+def test_talk_actions_exclude_the_silent_ones():
+    """「其中发声」那一列必须按 `simulate._SILENT_ACTIONS` 算。
+
+    这条用真动作名单验，**不重抄一份** —— 简报与仿真说两套话，
+    比说错一套更糟。
+    """
+    acts = [
+        [{"action": "create_post"}, {"action": "refresh"},
+         {"action": "do_nothing"}, {"action": "follow"}],
+        [{"action": "quote_post"}, {"action": "like_post"},
+         {"action": "mute"}, {"action": "repost"}],
+        [{"action": "refresh"}],
+        [{"action": "create_post"}, {"action": "create_post"}],
+        [{"action": "do_nothing"}, {"action": "sign_up"}],
+    ]
+    rd = _rounds(n_rounds=5, dpr=1.0, actions=acts)
+    rows = _build(rd)["evidence"]["rows"]
+    assert [r["n_actions"] for r in rows] == [4, 4, 1, 2, 2]
+    # like_post / repost / quote_post 都算发声，refresh/do_nothing/follow/mute/sign_up 不算
+    assert [r["n_talk_actions"] for r in rows] == [1, 3, 0, 2, 0]
+
+
+def _actions_for(n_rounds: int, participants: list[int],
+                 speakers: list[int]) -> list[list[dict]]:
+    """造每轮动作：`participants[i]` 个 agent 各出一条动作，其中
+    `speakers[i]` 个出的是发声动作、其余出 refresh。"""
+    out = []
+    for i in range(n_rounds):
+        row = []
+        for u in range(participants[i]):
+            row.append({"user_id": u,
+                        "action": "create_post" if u < speakers[i] else "refresh"})
+        out.append(row)
+    return out
+
+
+def test_presence_and_speech_are_two_counts_that_can_diverge():
+    """**在场人数与发声人数必须分开记，而且要能看出它们不同向。**
+
+    这是一次实测逼出来的口径：27 agent × 15 轮里发声条数从 21 掉到 9，
+    而**每一轮都有全部 27 个 agent 在动作** —— 只看条数会把它读成
+    「人少了 / 集体安静了」。两个症状的模型含义不同，简报里不能合并成一个数。
+    """
+    acts = _actions_for(5, [3, 3, 3, 3, 3], [3, 2, 2, 1, 1])
+    rd = _rounds(n_rounds=5, dpr=1.0, actions=acts)
+    ev = _build(rd)["evidence"]
+    assert [r["n_participants"] for r in ev["rows"]] == [3, 3, 3, 3, 3]
+    assert [r["n_speakers"] for r in ev["rows"]] == [3, 2, 2, 1, 1]
+    p = ev["presence"]
+    assert p["participants_constant"] is True
+    assert p["speakers_fell"] is True
+    assert p["speech_dropped_faster"] is True
+    assert (p["speakers_first"], p["speakers_last"]) == (3, 1)
+
+    sent = B._evidence_sentence(ev)
+    assert "在场人数" in sent and "发声人数" in sent
+    assert "不是在场的人" in sent, "两个数不同向时，正文必须把这一点说出来"
+
+
+def test_presence_is_silent_when_actions_were_not_recorded():
+    """**反方向：产出里没有动作记录时，一个字都不许编。**
+
+    `n_participants` 全是 0 有两种来源 —— 老产出没记 `actions`，
+    或者真的没人动作。这两种在数据里长得一样，所以这里**不猜**：
+    `presence` 为 `None`，正文不提这件事。报一个编出来的「在场 0 人」
+    比什么都不说更坏。
+    """
+    b = _build(_rounds(n_rounds=5, dpr=1.0))     # 夹具默认 actions=[]
+    ev = b["evidence"]
+    assert all(r["n_participants"] == 0 for r in ev["rows"])
+    assert ev["presence"] is None
+    assert "在场人数" not in B._evidence_sentence(ev)
+
+
+def test_falling_volume_alone_does_not_claim_the_wrong_cause():
+    """**反方向：在场人数也在掉的时候，不许说「不是在场的人」。**
+
+    上面那段话只在两个数**不同向**时成立。若在场人数与发声人数一起掉，
+    那确实是「人退出」—— 此时再念那句解释，就是拿一个模板去覆盖事实。
+    """
+    # 在场人数与发声人数一起掉（≤ 夹具 meta 里的 3 个 agent，别造出
+    # 「4 个 agent 在 3 个 agent 的推演里动作」这种自相矛盾的夹具）。
+    acts = _actions_for(5, [3, 3, 2, 2, 1], [3, 3, 2, 2, 1])
+    rd = _rounds(n_rounds=5, dpr=1.0, actions=acts)
+    ev = _build(rd)["evidence"]
+    p = ev["presence"]
+    assert p["participants_constant"] is False
+    assert p["speakers_fell"] is True          # 发声确实在掉……
+    assert p["speech_dropped_faster"] is False  # ……但在场掉得一样快
+    assert "1~3" in B._evidence_sentence(ev)
+    assert "不是在场的人" not in B._evidence_sentence(ev)
+
+
+def test_a_railed_round_is_reported_and_named():
+    """贴界是 `_clamp` 的产物，不是读数 —— 必须报出来，**而且要点名哪一轮**。
+
+    只印一句「本次有维度贴界」是不够的：读者要能回到表里找到是哪几轮。
+    """
+    b = _build(_railed_doc())
+    ev = b["evidence"]
+    assert ev["railed_rounds"], "这份夹具本该把维度推到边界上，却一轮都没贴界"
+    md = B.render_markdown(b)
+    assert "贴到上下界" in md
+    for r in ev["railed_rounds"]:
+        assert f"R{r}" in md, f"R{r} 贴界了，正文里却没点名"
+    assert any(d["kind"] == "railed" for d in b["degradations"]), \
+        "贴界没进降级项 —— 降级项是读者最先看的地方"
+
+
+def test_a_clean_run_does_not_cry_wolf():
+    """**反方向同样要测。** 一份没贴界、也没有零行为轮的产出，
+    不许出现「⚠️」与「贴到上下界」。一个永远喊狼来了的实现，
+    与一个永远报平安的实现，是同一种失效。"""
+    b = _build(_rounds(n_rounds=5, dpr=1.0))
+    ev = b["evidence"]
+    assert not ev["railed_rounds"] and not ev["no_evidence_rounds"]
+    assert not any(d["kind"] in ("railed", "no_evidence_round")
+                   for d in b["degradations"])
+    sent = B._evidence_sentence(ev)
+    assert "⚠️" not in sent
+    assert "贴到上下界" not in B.render_markdown(b)
+
+
+def test_a_zero_behavior_round_under_a_window_is_reported():
+    """**零条行为 ⟹ 那一轮没有观测。** 引擎那一步的激励项恒为 0
+    （`tanh(0/8)`），状态只由弛豫与耦合外推 —— 落在它上面的窗口数字
+    不是「测出来的」。这条判据没有自由参数：0 就是 0。
+    """
+    rd = _rounds(n_rounds=5, dpr=1.0,
+                 behaviors=[["disclosure", "discussion"], [],
+                            ["discussion"], ["disclosure"], ["discussion"]])
+    b = _build(rd)
+    assert b["evidence"]["no_evidence_rounds"] == [1]
+    assert any(d["kind"] == "no_evidence_round" for d in b["degradations"])
+    md = B.render_markdown(b)
+    assert "零条行为" in md and "R1" in md
+
+
+def test_evidence_check_is_not_vacuous():
+    """机检必须**真的能红**。把证据量那一节从正文里删掉再跑一次 —— 若仍然通过，
+    这条检查就是恒真的，等于没有。"""
+    b = _build(_railed_doc())
+    md = B.render_markdown(b)
+    assert B.check_brief(b, md) == [], B.check_brief(b, md)
+
+    # 逐块破坏，每一块都必须被逮到。
+    for label, broken in (
+        ("整节删掉", md.replace(B.MARKERS["evidence"], "「证据量」")),
+        ("贴界那句删掉", md.replace("贴到上下界", "（此处应有贴界说明）")),
+        ("R 行删掉", md.replace("| R2 |", "| 第2轮 |")),
+    ):
+        assert B.check_brief(b, broken) != [], f"删掉「{label}」之后机检仍然通过了"
+
+
+def test_evidence_section_is_unconditional():
+    """标记无条件出现 —— 与上下文压力同理：**「证据是够的」也要主动说出来**，
+    否则它与「没在数」在文件里长得一模一样。"""
+    rd = _rounds()
+    b = _build(rd)
+    md = B.render_markdown(b)
+    assert B.MARKERS["evidence"] in md
+    assert B.MARKERS["evidence"] in b["markers"].values()
 
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,9 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -38,14 +40,21 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import REPO_ROOT, ConfigError, load_config
+from .config import (
+    REPO_ROOT,
+    ConfigError,
+    ensure_log_handler_encoding,
+    load_config,
+)
 from .perception import (
     Knowledge,
     KnowledgeError,
     active_phase_by_round,
+    event_schedule,
     inject_round_context,
     knowledge_cutoff_by_round,
     install_injection,
+    load_events,
     load_knowledge,
     load_phases,
     phase_schedule,
@@ -94,6 +103,11 @@ class RoundLog:
     phase_id: str = ""                  # 本轮触发的阶段（P1..P5），无则空
     injected: dict[str, str] = field(default_factory=dict)   # actor_id -> 块摘要
     injection_sample: str = ""          # 首个非空块全文，供人眼核对措辞
+    # 上下文压力。**这是「本轮结论可不可信」的前提条件，不是性能指标** ——
+    # 一旦 camel 丢了旧记录，本轮的 agent 是在失忆状态下说话的，六维曲线
+    # 仍然画得出来、简报仍然出得来，只有这两个数字知道出过事。
+    truncations: int = 0                # 本轮发生的截断次数
+    truncated_tokens: int = 0           # 本轮单次丢得最多的一次丢了多少 token
 
 
 @dataclass
@@ -108,8 +122,30 @@ class SimulationResult:
     days_per_round: float = 1.0
     compressed: bool = False
     phases_on: bool = True
+    # 事件注入源（`phases` / `event_order`）。**必须落盘**，理由与 compressed
+    # 相同：两条口径的「有事件轮」是 5/15 与 8/15，曲线不可混用，而落盘之后
+    # 两者长得一模一样 —— 一份不知道自己是哪种口径的结果文件，必然被误引。
+    events_from: str = "phases"
     knowledge_on: bool = True
     feedback_on: bool = True
+    # 上下文压力（全程汇总）。**必须落盘**：一份没记录截断次数的结果文件，
+    # 日后无法回答「当时 agent 是不是已经在失忆了」这个问题。
+    context_limit: int = 0              # 本次用的 max_tokens（即上下文上限）
+    truncations: int = 0                # 全程截断总次数
+    truncation_unparsed: int = 0        # 其中解析失败的（>0 说明 camel 改了格式）
+    truncation_worst: int = 0           # 全程单次丢得最多的 token 数
+    # 切片护栏。**必须落盘**，理由与上面三个数相同，但更硬：护栏关掉时
+    # agent 的记忆会被 camel 切成 1 token 一块、膨胀约 20 倍，于是「这条曲线
+    # 是不是在退化状态下产生的」完全取决于这个开关，而产出文件里看不出来。
+    chunking_guard: bool = False
+    chunking_written_whole: int = 0     # 被拦下、原样写下的条数
+    chunking_still_sliced: int = 0      # 自己超上限、仍然被切的条数
+    # 时间戳被单调推进过的条数（自己取读数、但离上一条不足一个步长的）。
+    # **不要读成「本来会撞上 camel 那 1µs 窗口的条数」**：步长开着时，紧跟
+    # 在一个 tool 配对后面的终稿几乎必然被推进（它离上一条只有微秒），所以
+    # 这个数约等于「写入很快的次数」。撞窗口要数的是另一件事，判据在
+    # `_weiran_decay/epsilon_window.py` —— 八支臂上与 400 次数逐一对齐。
+    chunking_timestamp_pushed: int = 0
 
     @property
     def total_actions(self) -> int:
@@ -184,6 +220,338 @@ def enable_hf_offline_if_cached() -> str:
     return f"[HF] 缓存命中 {TW_HIN_REPO}，已切离线（跳过每轮的联网校验）"
 
 
+# ---------------------------------------------------------------------------
+# 上下文压力监测
+# ---------------------------------------------------------------------------
+#
+# camel 在 agent 记忆超限时会**丢弃旧记录**，而且只在日志里留一条 warning：
+# 没有任何东西在读它。也就是说 agent 静默失忆之后，产出看起来完全正常 ——
+# 六维曲线照画、简报照出、测试照绿。这是本项目最防的一类失效，所以给它装仪表。
+#
+# 机制是实读源码确认的（camel-ai 0.2.78，`memories/context_creators/score_based.py`）：
+#
+#   - `:149`  `total_tokens <= self.token_limit` → 直接返回，不截断
+#   - `:167`  否则丢弃低分记录，并
+#             `logger.warning("Context truncation performed: "
+#              f"before={total_tokens}, after={tokens_after}, limit={self.token_limit}")`
+#   - `:100`  若**连人设都放不下**（`system_tokens > token_limit`）→ **抛错**，
+#             不是截断。所以只有「记忆逐轮累积超限」这一路是静默的。
+#
+# **监听挂在 `camel` 这个 logger 上，不挂在那个具体名字上**，理由也是实测的：
+# camel 的 `get_logger(name)` 会**无条件**加 `camel.` 前缀，而模块自己的
+# `__name__` 已经带 `camel.` —— 于是真实名字是
+# `camel.camel.memories.context_creators.score_based`（上游自己的小毛病）。
+# `camel` 是「现在这个错名字」与「将来修好后的名字」的**共同祖先**，挂在这里
+# 两个都收得到，且不会重复计数；再按消息内容过滤，精度不受影响。
+#
+# 同时把 `camel` 的级别显式设成 WARNING：默认的生效级别虽然是 WARNING，
+# 但那是**继承来的** —— 任何一处 `basicConfig(level=ERROR)` 都会让这条警告
+# 消失，而消失了我们不会知道。显式设上，就是不让它被别人的配置悄悄关掉。
+TRUNCATION_LOGGER = "camel"
+TRUNCATION_MARKER = "Context truncation performed:"
+_TRUNCATION_RE = re.compile(r"before=(\d+),\s*after=(\d+),\s*limit=(\d+)")
+
+
+@dataclass(frozen=True)
+class TruncationEvent:
+    """一次上下文截断。`before`/`after` 是 **camel 自己算的数**，不是我们估的。"""
+
+    before: int
+    after: int
+    limit: int
+    raw: str = ""
+
+    @property
+    def dropped(self) -> int:
+        return max(self.before - self.after, 0)
+
+    @property
+    def parsed(self) -> bool:
+        return self.before >= 0
+
+
+class TruncationWatch(logging.Handler):
+    """把 camel 的上下文截断警告收集成结构化事件。
+
+    **解析不了的不许静默跳过**：记成一条 `parsed=False` 的事件。理由是
+    「格式变了 → 解析失败 → 当没发生」会让这个监测在两个方向上都失真，
+    而它的全部价值恰恰在于「**没有**截断」这个结论可信。宁可留一条看不懂的记录，
+    也不要让它悄悄退化成永远报平安。
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.events: list[TruncationEvent] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = record.getMessage()
+        except Exception:  # noqa: BLE001
+            return
+        if TRUNCATION_MARKER not in msg:
+            return
+        m = _TRUNCATION_RE.search(msg)
+        if m is None:
+            self.events.append(TruncationEvent(-1, -1, -1, msg))
+            return
+        self.events.append(TruncationEvent(
+            int(m.group(1)), int(m.group(2)), int(m.group(3)), msg))
+
+    # -- 查询 ---------------------------------------------------------------
+
+    @property
+    def count(self) -> int:
+        return len(self.events)
+
+    @property
+    def unparsed(self) -> int:
+        return sum(1 for e in self.events if not e.parsed)
+
+    @property
+    def worst(self) -> TruncationEvent | None:
+        """丢得最多的一次。**截断是「丢了多少」出事，不是「发生了几次」。**"""
+        return max(self.events, key=lambda e: e.dropped, default=None)
+
+    @property
+    def limit(self) -> int | None:
+        """camel 自报的上限。取最后一次 —— 它是同一次运行里同一个值。"""
+        for e in reversed(self.events):
+            if e.parsed:
+                return e.limit
+        return None
+
+
+def install_truncation_watch() -> TruncationWatch:
+    """挂上截断监听。**幂等** —— 重复调用返回同一个，不叠加 handler。
+
+    特意**不 import camel**：只装一个 logging handler。这一点是刻意的，因为
+    本项目必须在 `enable_hf_offline_if_cached()` 之前不碰 camel / oasis /
+    huggingface_hub，而这样设计之后本函数在任何时刻调用都是安全的。
+    """
+    lg = logging.getLogger(TRUNCATION_LOGGER)
+    for h in lg.handlers:
+        if isinstance(h, TruncationWatch):
+            return h
+    watch = TruncationWatch()
+    lg.addHandler(watch)
+    if lg.level == logging.NOTSET or lg.level > logging.WARNING:
+        lg.setLevel(logging.WARNING)
+    return watch
+
+
+def remove_truncation_watch(watch: TruncationWatch) -> None:
+    """摘掉监听。**只给测试用** —— 生产路径装一次就够，摘掉只会让监测失效。"""
+    logging.getLogger(TRUNCATION_LOGGER).removeHandler(watch)
+
+
+# ---------------------------------------------------------------------------
+# 切片护栏：收回 camel「反超大切片」的触发条件
+# ---------------------------------------------------------------------------
+
+CHUNKING_MARKER = "Slicing into smaller chunks"
+
+
+@dataclass
+class ChunkingGuard:
+    """统计护栏拦下了多少条本该被切碎的消息。"""
+
+    installed: bool = False
+    written_whole: int = 0      # 本来会被切碎、被我们原样写下的条数
+    still_sliced: int = 0       # 自己就超上限、仍然交给 camel 去切的条数
+    #: 时间戳被单调推进过的条数（自己取读数、但离上一条不足一个步长的）。
+    #: **不要把它读成「本来会撞上那扇缝的条数」**：步长开着时，紧跟在一个
+    #: tool 配对后面的终稿几乎必然被推进（它离上一条只有微秒），所以这个数
+    #: 约等于「写入很快的次数」。撞上窗口要数的是另一件事，判据在
+    #: `_weiran_decay/epsilon_window.py`（八支臂上与 400 次数逐一对齐）。
+    timestamp_pushed: int = 0
+    original: object = None     # 被替换掉的原方法，供 remove 还原
+    target: object = None       # 被替换方法的宿主类
+
+    #: 逻辑时钟的步长：每条记录与上一条之间**至少**推进这么多秒。取的是整整
+    #: 一拍时钟 —— 取小了跨不出 camel 给回执预留的那扇一微秒宽的门
+    #: （见安装函数的说明）。
+    TIMESTAMP_STEP = 1e-3
+
+
+_GUARD = ChunkingGuard()
+
+
+def install_chunking_guard(target=None) -> ChunkingGuard:
+    """把 camel 的切片条件收回到它本来要管的地方。**幂等。**
+
+    **为什么要动这个。** camel 的 `ChatAgent.update_memory` 在写记忆前先算
+    `remaining_budget = token_limit - ctx_tokens`（`ctx_tokens` 是**截断之后**
+    的 prompt 大小），只要 `current_tokens > remaining_budget` 就把这条消息
+    **切碎成多块**再写，每块自带一个 `[chunk i/N of a long message]` 前缀。
+
+    问题是：一旦记忆装满，截断就会启动，`ctx_tokens` 被顶到上限附近
+    → `remaining_budget ≈ 0` → `base_chunk_size = max(1, 0)//10 = 0`
+    → `chunk_body_limit = max(1, 0-前缀) = 1` —— **一条消息被切成「一块一个
+    token」，每块还各带一个约 12~19 token 的前缀**，一次写入因此膨胀约 20 倍。
+
+    实测（3 agent × 15 轮）：记忆里的记录数 83 → 2894 → 5878 → 8843 → **11798**，
+    总量 259,802 token，平均每条 **22 token**；日志里能直接看到
+    `Message with 7 tokens exceeds remaining budget of 0. Slicing into smaller
+    chunks.` —— 一条 7 个 token 的消息被判「太大」。
+
+    这是个**反馈环**：记忆满 → 截断 → 预算归零 → 切片 → 膨胀 20 倍 → 记忆更满。
+    进去就出不来。而且截断按「最新优先」保留，**留下的是每条消息的尾巴** ——
+    平台状态在消息开头，被丢掉；活下来的是末尾那句「请从下列动作里挑一个」。
+    跑在中后段的 agent 是在对着自己 prompt 的尾碎片行动，不是在对着校园。
+
+    **修法：只有「这条消息自己就超上限」（`current_tokens > token_limit`）
+    才该切。** 那个场景下切是必要的（不切就谁也装不进去）；而「预算只是紧」
+    本该由 `ScoreBasedContextCreator` 处理 —— 它的职责就是按分数驱逐旧记录、
+    保新弃旧。camel 把两种情形用同一个条件合并了。
+
+    **这是改第三方库的运行时行为**，所以：只在显式传 `--chunking-guard` 时装，
+    被替换的原方法留在 `guard.original` 里、`remove_chunking_guard` 可还原，
+    并在 `docs/开源及第三方资源使用清单.md` 里声明。
+
+    **顺序要求**：本函数 import camel，所以只能在 `enable_hf_offline_if_cached()`
+    与 `import oasis` 之后调用（`_run` 里就是这么放的）。
+
+    `target` 是**给测试用的注入口**：默认 camel 的 `ChatAgent`；传一个自带
+    `update_memory` 的替身类，就能在不碰 camel、不发 LLM 的前提下把
+    「该拦的拦、该切的不拦」两个方向都测到。生产路径不许传它。
+
+    **第二件事：写记录的时间戳必须单调推进。** 这是实测出来的，不是设计出来的。
+
+    camel 写下一次 tool 调用时，请求与回执是这样排的：请求用一次时钟读数，
+    回执用 `那个读数 + 1e-6`（`_record_tool_calling` 里写着 "Use
+    time.time_ns() for nanosecond precision to avoid collisions"），意思是
+    「回执稳稳排在请求后面」。但这条写入路径的实际时钟分辨率是**约 1ms**，
+    那个 1e-6 于是只是一扇**一微秒宽的门**：紧接着的那条记录（`_record_final_output`
+    写的终稿）只要自己的读数落进 `(base, base + 1e-6)`，排序键
+    `(timestamp, -score)` 就会排出「请求 → 终稿 → 回执」。端点不接受这个形状，
+    回 400 `insufficient tool messages following tool_calls message`，
+    而 OASIS 只记一行 `Agent ... error` 就继续跑 —— **该 agent 这一轮的动作
+    整条消失**。
+
+    实测（12 agent × 3 轮，同参数，见 `_weiran_decay/epsilon_window.py`）：
+
+    ============  ========  ==========  ==============  ============
+    臂            配对三连  落进窗口    终稿与请求间隔   400 次数
+    ============  ========  ==========  ==============  ============
+    护栏关        30        0           min 9.956e-04   0
+    护栏开        27        6           min 0.000e+00   6
+    ============  ========  ==========  ==============  ============
+
+    逐请求对得 1:1，零反例。护栏关时那条路径最慢也要跨过一整拍，永远够不到
+    窗口，所以免疫；**护栏不是缺陷的来源，它是这扇门唯一的把手** —— 缺陷是
+    「写入够快」这个前提，而护栏的全部目的就是让写入变快。
+
+    修法：**让这个 shim 成为该 agent 时间戳的唯一权威** —— 每条记录都取
+    `max(给的值或当前读数, 上一条 + 1e-3)`，包括 camel 显式给的那一对
+    （于是回执被推到请求之后**整整一拍**，那扇缝不再存在）。这样
+    「后写的一定有更大的时间戳」成了不变量，两类失效一起消失：
+
+    - **落进缝里**（读数严格在 `base` 与 `base + 1e-6` 之间）→ 请求与回执被
+      终稿隔开；
+    - **完全同值**（读数恰好等于 `base`）→ 分数降序会把「后写的那条」排前面，
+      于是**同拍里写在请求之前**的记录（例如这一轮开头那条观测）被挤进缝里。
+
+    第二条是写测试时才撞见的：一开始我只推自己那次读数、以为同值无害，直到
+    钉死的假钟把「轮次开头的 user 消息」和「请求」摆成同值，组装出来是
+    `请求 → user → 回执`。**同值不是无害，只是看对手写在请求的哪一边。**
+
+    代价：时间戳成了**逻辑时钟**，最多比真实时间快「写入条数 × 1e-3」秒
+    （每 agent 一轮几十条 → 不到 0.1 秒）。它的唯一消费者是排序
+    （最终排序键、分组取 max、回执按新→旧），没有任何绝对时间或跨 agent
+    用法，所以这个代价是零。
+    """
+    if _GUARD.installed:
+        return _GUARD
+
+    from camel.memories.records import MemoryRecord
+
+    if target is None:
+        from camel.agents.chat_agent import ChatAgent
+        target = ChatAgent
+
+    original = target.update_memory
+
+    def next_timestamp(agent, timestamp):
+        """这次写入该用哪个时间戳：每个 agent 一条**严格递增**的逻辑时钟。
+
+        `timestamp_pushed` 只数我们自己取读数、却被推后的那些。camel 显式给的
+        那对（请求/回执）**几乎总会被推**（它的 1e-6 小于一个步长），那是把缝
+        撑开、不是撞上，所以不计数 —— 也因此这个计数不是「撞窗口的次数」，
+        别那样读它。
+        """
+        last = getattr(agent, "_weiran_last_ts", None)
+        if timestamp is not None:
+            value = timestamp
+        else:
+            now = time.time_ns() / 1e9
+            value = now
+            if last is not None and value < last + _GUARD.TIMESTAMP_STEP:
+                _GUARD.timestamp_pushed += 1
+        if last is not None and value < last + _GUARD.TIMESTAMP_STEP:
+            value = last + _GUARD.TIMESTAMP_STEP
+        agent._weiran_last_ts = value
+        return value
+
+    def note_timestamp(agent, timestamp):
+        """交给原方法去写时，把游标推到**它可能用到的时间戳之外**。
+
+        原方法自己那次读数我们看不到，而且它还会把一条消息切成若干块、每块
+        再各自 `+ i * 1e-6`。用一个步长当前缀，覆盖到 1000 块为止 ——
+        再多就说明这条消息被切成了 1 token 一块，那是另一个事故
+        （护栏的存在理由），不归这里管。
+        """
+        now = time.time_ns() / 1e9
+        value = timestamp if timestamp is not None else now
+        last = getattr(agent, "_weiran_last_ts", None)
+        agent._weiran_last_ts = (value + _GUARD.TIMESTAMP_STEP
+                                 if last is None
+                                 else max(last, value) + _GUARD.TIMESTAMP_STEP)
+
+    def guarded_update_memory(self, message, role, timestamp=None):
+        try:
+            creator = self.memory.get_context_creator()
+            limit = creator.token_limit
+            own_tokens = creator.token_counter.count_tokens_from_messages(
+                [message.to_openai_message(role)])
+        except Exception:  # noqa: BLE001
+            # 算不出来就别自作聪明 —— 交回原方法。
+            note_timestamp(self, timestamp)
+            return original(self, message, role, timestamp)
+
+        if own_tokens > limit:
+            # 自己就超上限：切是必要的，交回原方法。
+            _GUARD.still_sliced += 1
+            note_timestamp(self, timestamp)
+            return original(self, message, role, timestamp)
+
+        # 放得下：原样写。旧记录由 ScoreBasedContextCreator 去驱逐。
+        # 这三行与 camel 自己的 `_write_single_record` 等价（那是闭包，取不到）。
+        base_ts = next_timestamp(self, timestamp)
+        self.memory.write_record(MemoryRecord(
+            message=message, role_at_backend=role,
+            timestamp=base_ts, agent_id=self.agent_id))
+        _GUARD.written_whole += 1
+        return None
+
+    ChatAgent.update_memory = guarded_update_memory
+    _GUARD.installed = True
+    _GUARD.original = original
+    return _GUARD
+
+
+def remove_chunking_guard() -> None:
+    """还原 camel 的原方法。**只给测试用**（生产路径装一次就够）。"""
+    if not _GUARD.installed:
+        return
+    from camel.agents.chat_agent import ChatAgent
+
+    ChatAgent.update_memory = _GUARD.original
+    _GUARD.installed = False
+    _GUARD.written_whole = 0
+    _GUARD.still_sliced = 0
+    _GUARD.timestamp_pushed = 0
+
+
 def build_model(
     config,
     *,
@@ -224,7 +592,7 @@ def build_model(
        实测单轮 prompt 约 6000–7000 token，留一倍余量；
        同时 16384 仍是单次输出的上界，不至于跑飞。
 
-    3. camel 不认识 `deepseek-flash`（不在它的模型枚举里），因此
+    3. camel 不认识 `deepseek-v4-flash`（不在它的模型枚举里），因此
        `model_type.token_limit` 落到兜底值 999,999,999 —— 不显式给值
        就等于没有上下文上限，也就没有账单上限。
     """
@@ -582,20 +950,41 @@ async def _run(
     world_state: bool = True,
     scenario_dir: Path | None = None,
     phases_on: bool = True,
+    events_from: str = "phases",
     knowledge_on: bool = True,
     feedback_on: bool = True,
     llm=None,
     stance_cache: Path | None = None,
     temperature: float | None = None,
     seed: int | None = None,
+    chunking_guard: bool = False,
 ) -> SimulationResult:
     # **必须在 import oasis 之前**：这一句会改环境变量，而 huggingface_hub
     # 的离线常量在它自己被 import 时求值。放在这里是因为 `_run` 是唯一
     # 会拉起 oasis 的入口（`main` 也走这里），放 `main` 会漏掉直接调 `_run` 的路径。
     print(f"  {enable_hf_offline_if_cached()}")
 
+    # 上下文压力仪表。**只装 handler，不 import camel**，所以放在这里不违反
+    # 上面那条「先切 HF 离线再碰 camel」的顺序要求。
+    watch = install_truncation_watch()
+
     import oasis
     from oasis import ActionType, LLMAction, ManualAction, generate_reddit_agent_graph, generate_twitter_agent_graph
+
+    # **必须在 import oasis 之后** —— oasis 自建的日志 FileHandler 是 import 时
+    # 建的，而且它没传 encoding（Windows 下即 GBK）。agent 在帖文里发一个 emoji
+    # 就会让那行日志抛 UnicodeEncodeError，被 logging 吞掉：堆栈照打、记录丢失。
+    # 详见 `config.ensure_log_handler_encoding`。
+    fixed_handlers = ensure_log_handler_encoding()
+    if fixed_handlers:
+        print(f"  日志编码：修正 {fixed_handlers} 个 handler 的 errors 策略"
+              "（oasis 自建的 FileHandler 未指定 encoding，emoji 会让整行丢失）")
+
+    # 切片护栏。**必须在 import oasis / camel 之后**（它 import camel），
+    # 且**默认关闭** —— 它改的是 camel 的写入行为，先 A/B 再决定要不要默认开。
+    guard = install_chunking_guard() if chunking_guard else None
+    if chunking_guard:
+        print("  切片护栏=开（只切「自己就超上限」的消息，其余交给截断驱逐）")
 
     is_twitter = platform == "twitter"
     names = TWITTER_ACTIONS_NAMES if is_twitter else REDDIT_ACTIONS_NAMES
@@ -710,9 +1099,34 @@ async def _run(
         print("  ⚠️ 只有 1 轮，阶段无法映射到轮号 —— **本次不注入阶段事件**。"
               "要阶段就 --rounds ≥2，要明确关掉就 --no-phases。")
         phases_on = False
+    if not phases_on and events_from != "phases":
+        # 两个开关互相矛盾时**出声**：--events-from 只有在阶段事件开着时才有效，
+        # 否则「选了 event_order」会被读成「用了 event_order」，而实际一条都没注入。
+        print("  ⚠️ --no-phases 与 --events-from event_order 同时给了 —— "
+              "事件注入已整体关掉，事件源不生效，本次不注入任何事件。")
     if phases_on and scenario_dir is not None:
         phase_list = load_phases(scenario_dir)
-        schedule, dpr, compressed = phase_schedule(phase_list, rounds)
+        # **轮-天映射永远由阶段表决定**（见 `event_schedule` 的 docstring）：
+        # event_order 里有一条 day 28，拿它算跨度会把 15 轮误判成压缩模式。
+        _, dpr, compressed = phase_schedule(phase_list, rounds)
+        if events_from == "event_order":
+            events = load_events(scenario_dir)
+            schedule, outside = event_schedule(events, phase_list, rounds)
+            n_injected = sum(len(v) for v in schedule.values())
+            print(f"  事件源 event_order：金标 {len(events)} 条日程，"
+                  f"本次注入 {n_injected} 条、落在 {len(schedule)}/{rounds} 个轮上；"
+                  f"无事件的轮 {rounds - len(schedule)} 个")
+            if outside:
+                # **不静默丢。** 丢掉的正好是「金标说那天发生了事」，而简报
+                # 会把没有事件的那一轮读成「这一轮没有信息」——两件事不一样。
+                print(f"  ⚠️ 窗口外 {len(outside)} 条事件未注入"
+                      f"（day ≥ {rounds * dpr:.0f}，本次推演只覆盖 "
+                      f"{rounds * dpr:.0f} 天）："
+                      + "；".join(f"day{e.day} {e.trigger}" for e in outside))
+        else:
+            schedule, _, _ = phase_schedule(phase_list, rounds)
+            print(f"  事件源 phases：{len(schedule)}/{rounds} 个轮有事件"
+                  f"（无事件的轮 {rounds - len(schedule)} 个）")
         # 每一轮归属到「当时生效的最近一个阶段」，只用于给引擎识别出的事件打标签。
         phase_by_round = active_phase_by_round(phase_list, rounds, dpr)
         # 知情范围也要按轮裁：第 0 轮不该知道 P3 才下发的删帖通知。
@@ -739,6 +1153,9 @@ async def _run(
     result.phases_on = phases_on
     result.days_per_round = dpr
     result.compressed = compressed
+    # 事件源只在真的注入了事件时才算数：--no-phases 下两条口径都没有事件，
+    # 把 phases/event_order 写进去会让「关掉了」看起来像「用了哪一种」。
+    result.events_from = events_from if phases_on else "none"
 
     # 世界状态引擎接进逐轮循环 —— **这一步之前，六维曲线只在离线重放上跑过**。
     # 每一轮：读 trace → 还原行为类型 → 推进六维 → 存进 RoundLog。
@@ -761,6 +1178,7 @@ async def _run(
         before = (stats.calls, stats.seconds,
                   stats.prompt_tokens, stats.completion_tokens,
                   stats.failures, len(stats.samples))
+        trunc_before = watch.count
         entry = RoundLog(index=i)
 
         step: dict = {a: LLMAction() for a in agents_list}
@@ -822,6 +1240,12 @@ async def _run(
         entry.failures = stats.failures - before[4]
         # 最慢一次取本轮样本的最大值 —— `stats.slowest` 是全程最大值，差分不出来。
         entry.slowest = round(max(stats.samples[before[5]:], default=0.0), 2)
+        # 上下文压力。截断发生在 `env.step` 里（拼 prompt 的时候），但归类器
+        # 也走 LLM，所以窗口取整轮 —— 归属到哪一步并不重要，「这一轮出过事」
+        # 才是要回答的问题。
+        round_events = watch.events[trunc_before:]
+        entry.truncations = len(round_events)
+        entry.truncated_tokens = max((e.dropped for e in round_events), default=0)
 
         # 世界状态推进。**跑在这一轮的动作上，而不是素材上。**
         action_texts = texts_from_actions(new, load_posts(db_path))
@@ -857,6 +1281,13 @@ async def _run(
               f"动作 {len(new)} 条{tok}"
               + (f"  错误 {entry.errors}" if entry.errors else "")
               + (f"  [阶段 {entry.phase_id}]" if entry.phase_id else ""))
+        if entry.truncations:
+            # **失忆是静默的，所以这行必须吵。** 本轮的 agent 已经在丢历史记录了，
+            # 而六维曲线不会因此变难看、简报不会因此报错、测试也不会红 ——
+            # 全场只有这一行会说这件事。
+            print(f"         ⚠️ 上下文截断 {entry.truncations} 次，单次最多丢 "
+                  f"{entry.truncated_tokens} token（上限 {max_tokens}）"
+                  " —— **本轮的 agent 可能已在失忆，结论要打折**")
         # 感知层的可见证据。**这行是「闭环到底闭没闭上」的唯一现场答案** ——
         # 六维曲线平的时候，第一件事是看这里是不是 0；若不是 0，问题在模型，
         # 若是 0，问题在接线。
@@ -875,6 +1306,19 @@ async def _run(
                 f"{d[:4]}={entry.state[d]:.3f}" for d in DIMENSIONS))
 
     result.total_seconds = time.monotonic() - started
+    # 上下文压力汇总。**「没发生」也要报** —— 只说「发生了 N 次」的话，
+    # 没发生就什么都不说，读者无法区分「没截断」与「没在数」。
+    result.context_limit = max_tokens
+    result.truncations = watch.count
+    result.truncation_unparsed = watch.unparsed
+    result.truncation_worst = watch.worst.dropped if watch.worst else 0
+    # 切片护栏的计数。**开着却一次都没拦下，与没开等价** —— 那这条臂是空的，
+    # 不能拿它当「护栏没用」的证据（与注入侧的同类检查一个道理）。
+    result.chunking_guard = chunking_guard
+    if guard is not None:
+        result.chunking_written_whole = guard.written_whole
+        result.chunking_still_sliced = guard.still_sliced
+        result.chunking_timestamp_pushed = guard.timestamp_pushed
     # 缓存必须在收尾前落盘：它是产物的一部分，下次同输入复跑就靠它
     # 保证六维曲线一模一样（见 stance.py 开头）。
     stance.save()
@@ -912,6 +1356,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="只跑引擎，不推进六维状态（对照用）")
     ap.add_argument("--no-phases", action="store_true",
                     help="不注入阶段事件（对照用）。此时时间线只剩 --seed-text")
+    ap.add_argument("--events-from", choices=("phases", "event_order"),
+                    default="phases",
+                    help="事件注入源。phases（默认）= 5 条阶段概括 trigger，"
+                         "只落在轮 0/2/5/8/14，其余 10 轮无事件；"
+                         "event_order = 金标那 17 条带日期的事件明细，"
+                         "有事件的轮变为 8/15。**默认暂不改** —— 先实测"
+                         "（后段是否回暖、贴壁是否提前）再决定")
     ap.add_argument("--no-knowledge", action="store_true",
                     help="不回注知情范围（消融对照用）。差异化感知的另一半")
     ap.add_argument("--no-feedback", action="store_true",
@@ -926,6 +1377,10 @@ def main(argv: list[str] | None = None) -> int:
                          "默认不传，用端点默认值")
     ap.add_argument("--seed", type=int, default=None,
                     help="采样种子。服务端只「尽力」遵守，不保证逐位可复现")
+    ap.add_argument("--chunking-guard", action="store_true",
+                    help="收回 camel 的反超大切片条件：只有「消息自己就超上限」"
+                         "才切，其余原样写、交给截断驱逐。**默认关闭** —— 它改的是"
+                         "camel 的写入行为，先 A/B 再决定要不要默认开")
     args = ap.parse_args(argv)
 
     try:
@@ -959,8 +1414,9 @@ def main(argv: list[str] | None = None) -> int:
     # 把「这一轮哪些开关是开的」摆在最前面。默认全开是有意为之（闭环本该默认
     # 闭上），但同一条命令今天的输出与昨天**不同** —— 不写出来，旧结论与新结果
     # 对不上时没人知道为什么。
-    print("  闭环：阶段事件={} · 态势回注={} · 知情回注={}".format(
+    print("  闭环：阶段事件={}（源 {}） · 态势回注={} · 知情回注={}".format(
         "关" if args.no_phases else "开",
+        "—" if args.no_phases else args.events_from,
         "关" if args.no_feedback else "开",
         "关" if args.no_knowledge else "开"))
 
@@ -978,12 +1434,14 @@ def main(argv: list[str] | None = None) -> int:
         world_state=not args.no_world_state,
         scenario_dir=scenario_dir,
         phases_on=not args.no_phases,
+        events_from=args.events_from,
         knowledge_on=not args.no_knowledge,
         feedback_on=not args.no_feedback,
         llm=classifier_llm,
         stance_cache=None if args.no_stance_cache else out_dir / "stance_cache.json",
         temperature=args.temperature,
         seed=args.seed,
+        chunking_guard=args.chunking_guard,
     ))
 
     total_calls = sum(r.calls for r in result.rounds)
@@ -1023,6 +1481,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f"感知：累计注入 {total_inj} 次"
               f"（{len(result.rounds)} 轮，每轮最多 {agents} 个 agent）")
 
+    # 上下文压力。**「零次」要主动说出来** —— 一行不印的话，读者无法区分
+    # 「没有截断」和「没有在数」，而后者会让整条曲线失去可信度。
+    if result.truncations:
+        print(f"  ⚠️ 上下文截断全程 {result.truncations} 次，"
+              f"单次最多丢 {result.truncation_worst} token（上限 {result.context_limit}）"
+              f" —— **这些轮次的 agent 可能已在失忆，结论要打折**")
+    else:
+        print(f"上下文：全程 **未发生截断**（上限 {result.context_limit}，"
+              f"已监测 {result.total_actions} 条动作所在的每一轮）")
+    if result.truncation_unparsed:
+        print(f"  ⚠️ 其中 {result.truncation_unparsed} 次解析失败 —— "
+              "camel 可能改了警告格式，本项监测已不可信，先修它再看结论")
+    # 切片。**这是与截断并列的第二个上下文事故**，而且更隐蔽：截断只是丢旧的，
+    # 切片会把**当轮那条消息本身**切成 1 token 一块，于是 agent 连自己当前的
+    # 环境都读不全。护栏没开时它照样在发生，所以这里要说清「在不在数」。
+    if not result.chunking_guard:
+        print("  切片护栏=关（camel 会在预算耗尽时把消息切成小块，默认行为）")
+    elif result.chunking_written_whole == 0:
+        print("  ⚠️ 切片护栏开着却一次都没拦下 —— 这条臂是空的，"
+              "不能拿它当「切片无影响」的证据")
+    else:
+        print(f"切片护栏：拦下 {result.chunking_written_whole} 条本该被切碎的消息"
+              f"（原样写入，交给截断驱逐）；仍有 {result.chunking_still_sliced} 条"
+              "自己就超上限、按原逻辑切")
+        print(f"  其中时间戳被推进过 {result.chunking_timestamp_pushed} 条"
+              "（逻辑时钟：这一步挡的是「打断 tool 配对 → 端点 400 → "
+              "丢一整轮动作」）")
+
     out_file = out_dir / f"{args.platform}_rounds.json"
     out_file.write_text(
         json.dumps(
@@ -1038,11 +1524,27 @@ def main(argv: list[str] | None = None) -> int:
                     "compressed": result.compressed,
                     "comparable_to_round_day": not result.compressed,
                     "phases_on": result.phases_on,
+                    "events_from": result.events_from,
                     "knowledge_on": result.knowledge_on,
                     "feedback_on": result.feedback_on,
                     "world_state": not args.no_world_state,
                     "total_seconds": round(result.total_seconds, 2),
                     "total_actions": result.total_actions,
+                    # 上下文压力。**这三个数决定「这份结果可不可信」** ——
+                    # 截断是静默的，没有它们，一份 agent 已经在失忆的产出
+                    # 与一份健康的产出在文件里长得一模一样。
+                    "context_limit": result.context_limit,
+                    "truncations": result.truncations,
+                    "truncation_unparsed": result.truncation_unparsed,
+                    "truncation_worst_dropped": result.truncation_worst,
+                    # 切片护栏。**这份产出是在哪种口径下跑的，必须落盘** ——
+                    # 护栏关掉时记忆会被 camel 切成 1 token 一块、膨胀约 20 倍，
+                    # 两条口径的曲线不可混用，而文件里看不出来。
+                    "chunking_guard": result.chunking_guard,
+                    "chunking_written_whole": result.chunking_written_whole,
+                    "chunking_still_sliced": result.chunking_still_sliced,
+                    "chunking_timestamp_pushed":
+                        result.chunking_timestamp_pushed,
                 },
                 "rounds": [
                     {"index": r.index, "seconds": round(r.seconds, 2),
@@ -1053,6 +1555,8 @@ def main(argv: list[str] | None = None) -> int:
                      "phase_id": r.phase_id,
                      "injected": r.injected,
                      "injection_sample": r.injection_sample,
+                     "truncations": r.truncations,
+                     "truncated_tokens": r.truncated_tokens,
                      "behaviors": r.behaviors, "state": r.state,
                      "actions": r.actions, "errors": r.errors}
                     for r in result.rounds

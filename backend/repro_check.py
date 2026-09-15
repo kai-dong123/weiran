@@ -19,6 +19,32 @@
 
 **把做不到的那一层如实报出来，比含糊掉它重要得多。**
 
+**这个脚本自己翻过三次车，三次都值得留在文件里。**
+
+第一次：第 3 层没传 `--out`，于是自检把仓库里那份入库产出静默覆盖掉了。
+
+第二次（修第一次的时候引入的）：修法是「把 `--out` 指到临时目录」，
+但 **`--out` 的粒度是目录，不是文件** —— `simulate` 从它读画像
+（`out_dir/twitter_profiles.csv`）与知情映射（`out_dir/actor_knowledge.json`），
+再往 `out_dir/twitter_rounds.json` 写产出。给它一个 `e2e_a.json` 这样的
+**文件名**，它会在读画像那一步 `FileNotFoundError` —— 第 3 层整层跑不起来。
+
+第三次（2026-09-15 才发现，一直躺在那里）：第 3 层**读不动子进程的话**。
+`encoding="utf-8"` 传给 `subprocess.run`，而子进程在 Windows 中文机器上
+被重定向到管道时说的是 cp936/GBK，于是读取线程里解码失败 —— 那个异常
+不让 `run()` 抛，只让 `proc.stdout` 变成 `None`，报出来的错是下一行的
+`AttributeError: 'NoneType' object has no attribute 'splitlines'`。
+**像一个推演失败的报错，实际是一行中文没读进来。** 详见 `child_env()`。
+
+三次的**共同点比差异更要紧**：第一次是「产物被毁但没人看」，第二次与
+第三次都是「**测试全绿而工具已经废了**」。第 9 套测试当时测的是
+「argv 里有没有 `--out`、它是不是不等于入库产出」—— 两条都真，
+而发出去的命令根本跑不通。**只断言「参数在场」的检查，是这个项目最该防的
+那种恒真检查。** 所以第二次那一版加的不是断言，是**把运行目录真的造出来**
+（`_seed_run_dir`）：能不能跑，取决于磁盘上有没有那几份输入，而不是取决于
+字符串长得对不对。第三次同理，加的检查是**真的起一个子进程说一句中文、
+按 `_run_sim` 的读法把它读回来**，而不是断言「env 里有没有那个键」。
+
 第 2.5 层是补上去的，理由值得写下来：上面那句「不可复现」说的是**曲线**，
 不是**产出物**。一份给人看的简报里没有 LLM、没有随机数、没有时间戳，
 所以它**必须**逐字可复现 —— 否则「不可复现」就从一条有边界的性质，
@@ -35,8 +61,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent
@@ -56,17 +85,144 @@ REPLAY_BEHAVIORS = [
 ]
 
 
-def _run_sim(rounds: int, agents: int) -> tuple[dict, str]:
+#: 仓库里那份**随仓库入库**的推演产出，以及它所在的目录。
+#: `check_brief()` 读它，而 `_run_sim()` **绝不能写它** —— 见 `sim_argv()`。
+SHIPPED_DIR = SIM
+SHIPPED_ROUNDS = SIM / "twitter_rounds.json"
+
+#: 一次推演要能在某个目录里跑起来，必须先有这些输入文件。
+#: **`--out` 不是「输出文件」，是「输出目录」** —— 这一条是这个文件里最贵的教训：
+#: `simulate` 从 `out_dir` 读画像（`out_dir/twitter_profiles.csv`）与知情映射
+#: （`out_dir/actor_knowledge.json`），再往 `out_dir/twitter_rounds.json` 写产出。
+#: 所以「把 --out 指到临时目录」的正确做法是**造一个完整的运行目录**，
+#: 而不是给一个临时文件名 —— 后者会在读画像那一步就炸（见 `_seed_run_dir`）。
+RUN_INPUTS = ("twitter_profiles.csv", "actor_knowledge.json", "stance_cache.json")
+
+
+def sim_argv(rounds: int, agents: int, out_dir: Path) -> list[str]:
+    """构造一条推演命令，产出落在 `out_dir/twitter_rounds.json`。
+
+    **`--out` 必须显式给，而且必须不指向仓库里那个目录。** 这不是洁癖：
+    原先这里不传 `--out`，于是 `python -m weiran.simulate` 用了它自己的默认值
+    `data/simulation`（**是目录，不是文件**）—— 跑一次自检就把仓库里那份
+    27 agent × 15 轮的产出覆盖成 5 agent × 3 轮的临时结果，而且没有任何提示。
+    一个验证工具静默销毁它要验证的东西，是这个项目最不该有的东西。
+
+    拆成一个纯函数是为了能被离线测到：真的跑一次第 3 层要调 LLM、要花钱、
+    要十几分钟，而这条约束本身是可以用一次字符串比较守住的东西。
+
+    参数名从 `out` 改成 `out_dir` 是故意的：叫 `out` 的时候，调用方
+    （包括我自己）会理所当然地传一个 `.json` 文件名进去，而那是跑不起来的。
+    """
+    cmd = [sys.executable, "-m", "weiran.simulate",
+           "--agents", str(agents), "--rounds", str(rounds),
+           "--seed-text", SEED, "--out", str(out_dir)]
+    # 兜底自检：即便上面的字符串哪天被改错，也不许落到仓库那份产出上。
+    # 比两处：既不许是那个文件，也不许是它所在的目录（目录才是 --out 的粒度）。
+    resolved = Path(out_dir).resolve()
+    for bad, why in ((SHIPPED_ROUNDS, "仓库里那份产出"),
+                     (SHIPPED_DIR, "仓库里那份产出所在的目录")):
+        if resolved == bad.resolve():
+            raise RuntimeError(
+                f"自检的推演输出被指到了{why}（{bad}）—— "
+                f"跑一次就会把它覆盖掉。改用一个临时目录。"
+            )
+    return cmd
+
+
+def _seed_run_dir(src: Path, dst: Path) -> list[str]:
+    """把一次推演必需输入复制进 `dst`，返回实际复制了的文件名。
+
+    **不复制就跑步起来。** `simulate` 的 `--out` 是输出目录，而它同时从那个
+    目录读画像与知情映射 —— 于是「指到临时目录」这件事不是把输出挪走，
+    是**造一个能跑起来的完整目录**。缺 `twitter_profiles.csv` 会直接
+    `FileNotFoundError`（这一条实测过），而那个失败发生在任何 LLM 调用之前，
+    所以它不花钱、但会让第 3 层整层跑不起来。
+
+    `stance_cache.json` 有就复制、没有就算了：它是**可选加速**，
+    缺了会重新归类（花 LLM、也让两次运行的归类结果不再共享）。
+    把它带上，两次运行的标签口径才一致。
+
+    Raises:
+        RuntimeError: 必需的输入文件在仓库里就找不到。**必须响** ——
+            那说明仓库不完整，而第 3 层会以一个看不出原因的推演失败告终。
+    """
+    dst.mkdir(parents=True, exist_ok=True)
+    copied: list[str] = []
+    for name in RUN_INPUTS:
+        s = src / name
+        if not s.is_file():
+            if name == "stance_cache.json":
+                continue            # 可选加速，不是必需输入
+            raise RuntimeError(
+                f"仓库里缺少 {s} —— 第 3 层没法在一个临时目录里跑起来。"
+                "这份文件随仓库入库，缺了说明仓库不完整。"
+            )
+        shutil.copy2(s, dst / name)
+        copied.append(name)
+    return copied
+
+
+def child_env() -> dict:
+    """让子进程按 UTF-8 说话 —— 否则父进程解不出它的话。
+
+    **这是这个文件翻的第三次车，而且是最隐蔽的一次：它把第 3 层藏起来了。**
+    上面（`_run_sim`）一直写的是 `capture_output=True, text=True,
+    encoding="utf-8"`。三个参数都真、都合理，而子进程在 Windows 中文机器上
+    被重定向到管道时，stdout 的编码是**本机 locale（cp936/GBK）**，
+    不是 UTF-8 —— `weiran/config.py:ensure_console_encoding()` 只改
+    `errors` 策略、**故意不动 encoding**（它要的是中文照原样显示，不是改成
+    UTF-8）。于是父进程拿 UTF-8 去解 GBK 字节，实测：
+
+        python repro_check.py
+        UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd0 in position 2
+
+    错在父进程读不动，可它炸出来的样子是另一回事：解码发生在
+    `subprocess` 的**读取线程**里，那个异常不会让 `run()` 抛出去，只会让
+    `proc.stdout` 变成 `None`，然后这里下一行的 `proc.stdout.splitlines()`
+    报 `AttributeError: 'NoneType' object has no attribute 'splitlines'`
+    —— **指向一个跟真正原因毫无关系的对象**。第 3 层就这样整层停摆，
+    而它停摆的方式是「抛异常」，不是「报一个错的数」，所以只看输出像是
+    「推演本身跑不起来」，于是会去查推演。
+
+    修法也**不动父进程的 decode**：父进程要读的 `"完成：…"` 是中文，
+    拿 `errors="replace"` 兜住会把中文换成问号、那行就永远找不到了
+    （那就从「崩掉」退化成「静默少一行」，比崩掉更坏）。正解是让子进程
+    真的说 UTF-8：`PYTHONIOENCODING` 是 Python 自己认的开关，
+    对推演行为**零影响**（只换输出编码），所以拿它对齐不引入任何混淆变量。
+
+    教训的形状跟前两次**是同一个**：这个文件坏掉的方式，总是「测试全绿、
+    而工具已经废了」。前两次是 argv 长得对、跑不通；这一次是参数写得对、
+    字节解不开。所以配的检查（`test_repro_check.py::test_child_env_…`）
+    不是断言这个字典长什么样，而是**真的起一个子进程说一句中文、父进程
+    按 `_run_sim` 的读法把它读回来** —— 恒真检查防不住这一类。
+    """
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
+def _run_sim(rounds: int, agents: int, out_dir: Path) -> tuple[dict, str]:
     proc = subprocess.run(
-        [sys.executable, "-m", "weiran.simulate",
-         "--agents", str(agents), "--rounds", str(rounds), "--seed-text", SEED],
+        sim_argv(rounds, agents, out_dir),
         cwd=BACKEND, capture_output=True, text=True, encoding="utf-8",
+        env=child_env(),  # TEMP-PULL
     )
+    if proc.stdout is None:
+        # 解不动子进程的话。这里**必须响**，而且必须响在正确的地方 ——
+        # 见 `child_env()`：默认的炸法是下一行把 None 当字符串用。
+        raise SystemExit(
+            "推演子进程的输出解不成 UTF-8（stdout 为 None）。"
+            "原因通常是子进程按本机 locale 说话；"
+            f"当前 PYTHONIOENCODING={child_env().get('PYTHONIOENCODING')!r}，"
+            "应当由 _run_sim 传下去。"
+        )
     if proc.returncode != 0:
         print(proc.stdout[-2000:])
         print(proc.stderr[-2000:], file=sys.stderr)
         raise SystemExit(f"推演失败，退出码 {proc.returncode}")
-    payload = json.loads((SIM / "twitter_rounds.json").read_text(encoding="utf-8"))
+    # 产出文件名是 simulate 定的，不是调用方定的（`--out` 只给目录）。
+    payload = json.loads((Path(out_dir) / "twitter_rounds.json").read_text(encoding="utf-8"))
     line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("完成：")), "")
     return payload, line
 
@@ -193,11 +349,17 @@ def check_engine() -> bool:
 # 第 3 层：端到端 —— 同一条命令，同一条曲线
 # ---------------------------------------------------------------------------
 
-def check_end_to_end(rounds: int, agents: int) -> bool:
+def check_end_to_end(rounds: int, agents: int, workdir: Path) -> bool:
     print(f"\n【第 3 层】端到端：同一条命令跑两次（{agents} agent × {rounds} 轮）")
-    a_meta, line_a = _run_sim(rounds, agents)
+    # 两次运行各占一个**完整的运行目录**（画像 + 知情映射 + 归类缓存），
+    # 都不碰仓库那份产出（见 `sim_argv` / `_seed_run_dir`）。
+    a_dir, b_dir = workdir / "e2e_a", workdir / "e2e_b"
+    for d in (a_dir, b_dir):
+        copied = _seed_run_dir(SHIPPED_DIR, d)
+        print(f"  {d.name}/ 就绪：" + "、".join(copied))
+    a_meta, line_a = _run_sim(rounds, agents, a_dir)
     print("  第一次 " + line_a)
-    b_meta, line_b = _run_sim(rounds, agents)
+    b_meta, line_b = _run_sim(rounds, agents, b_dir)
     print("  第二次 " + line_b)
 
     # 压缩过的曲线与 round=day 不可比（激励项按步累加）。这一层比的是
@@ -244,7 +406,12 @@ def main() -> int:
     results = {"归类": check_classifier(), "引擎": check_engine(),
                "简报": check_brief()}
     if not args.skip_e2e:
-        results["端到端"] = check_end_to_end(args.rounds, args.agents)
+        # **第 3 层的产物写进临时目录。** 它跑的是完整的 LLM 推演，
+        # 若沿用默认输出路径，跑一次自检就会覆盖 `data/simulation/` 里
+        # 那份随仓库入库的产出（曾经真的发生过）。
+        with tempfile.TemporaryDirectory(prefix="weiran-repro-") as tmp:
+            results["端到端"] = check_end_to_end(args.rounds, args.agents,
+                                                 Path(tmp))
 
     print("\n" + "=" * 62)
     for k, v in results.items():

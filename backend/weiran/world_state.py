@@ -294,6 +294,25 @@ class WorldStateEngine:
         params: 维度参数。默认用 DIMENSION_PARAMS。
         coupling: 耦合矩阵。默认用 COUPLING。
         excitation: 行为激励表。默认用 EXCITATION。
+        couple_saturate: 耦合是否按**目标余量**饱和。**默认关闭。**
+            关闭时（现状）耦合按 `w * (relaxed[src] - baseline[src])` 无界累加，
+            于是一个贴到自己那侧边界的维度会成为**永久且量级最大**的耦合源 ——
+            信任贴到 0 时 `dev = -0.70`（该维允许的最大偏差），每轮都往外
+            灌 0.245 的「影响」。而耦合图上
+            `trust→panic→risk→polarization→trust` 是一个正反馈环
+            （环积 `(-0.20)(+0.15)(+0.10)(-0.10) = +0.0003 > 0`），
+            于是**一维的墙会传染成四维的墙**，末步那个硬夹只是让这个不动点
+            无法逃逸。开启后，耦合对目标的推动按其**尚未用掉的余量**缩放：
+            目标越是贴近边界，这份推动越推不动，贴壁处系数趋于 0。
+            物理读法是「影响是体积流量，不是无界相加」。
+            注意系数取的是**弛豫后**的余量（耦合本来就用 `relaxed` 算），
+            所以贴壁的维度在弛豫那一步已经离壁一点点，系数是很小的正数
+            而不是恰好 0 —— 这一点由 `test_a_railed_dimension_stops_sourcing_coupling`
+            按公式钉住。
+            离线实测（真实 27 agent 行为流，0 LLM 成本）：
+            贴壁读数 `19 → 0`，信任 P5 `0.000 → 0.072`。
+            **它不改变形状**（AS-2/AS-4/AS-5 在开关两态下都不过）——
+            形状由行为流的相位决定，见 `进度.md`。
     """
 
     def __init__(
@@ -301,10 +320,12 @@ class WorldStateEngine:
         params: dict[str, DimensionParams] | None = None,
         coupling: dict[str, dict[str, float]] | None = None,
         excitation: dict[str, dict[str, float]] | None = None,
+        couple_saturate: bool = False,
     ) -> None:
         self.params = params or DIMENSION_PARAMS
         self.coupling = coupling if coupling is not None else COUPLING
         self.excitation = excitation or EXCITATION
+        self.couple_saturate = couple_saturate
 
     # -- 单步 --------------------------------------------------------------
 
@@ -382,6 +403,13 @@ class WorldStateEngine:
             if dev == 0.0:
                 continue
             for dst, w in targets.items():
+                if self.couple_saturate:
+                    # 按目标**尚未用掉的余量**缩放。贴壁处系数为 0，
+                    # 于是「贴壁」不再是一个永久的耦合源（见 __init__ 的说明）。
+                    push = w * dev
+                    w = w * _clamp(
+                        (1.0 - relaxed[dst]) if push > 0 else relaxed[dst], 0.0, 1.0
+                    )
                 coupling[dst] += w * dev
         final = {
             d: _clamp(relaxed[d] + coupling[d], 0.0, 1.0) for d in DIMENSIONS

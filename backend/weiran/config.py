@@ -51,6 +51,50 @@ def ensure_console_encoding() -> None:
             pass  # 不是 TextIOWrapper（测试里的 StringIO、已关闭的流等）
 
 
+def ensure_log_handler_encoding() -> int:
+    """把**已经建好的**日志 handler 的流也改成 `errors="replace"`。返回改了几个。
+
+    **为什么 `ensure_console_encoding()` 不够。** 它只覆盖 `sys.stdout`/`sys.stderr`。
+    而 oasis 自建了一个 `logging.FileHandler` 却**没传 `encoding`**
+    （`oasis/social_agent/agent.py:44`）—— 同一个库里 `oasis/environment/env.py:40`
+    就老老实实传了 `encoding="utf-8"`，所以这是上游的疏漏，不是设计。Windows 下
+    `FileHandler` 默认取 `locale` 编码 = GBK，于是 agent 只要在帖文里发一个 emoji：
+
+        --- Logging error ---
+        UnicodeEncodeError: 'gbk' codec can't encode character '\\U0001f90d'
+
+    `logging` 会吞掉这个异常并**把那一行丢掉**。后果有两层，第二层更要命：
+    日志里冒出一段吓人的堆栈（录演示视频时看着像崩了），**而真正的那条记录没了**。
+    实测 27 agent × 15 轮第一次跑，第 0 轮就撞上，且不是偶发 —— agent 发 emoji 很常见。
+
+    修法沿用 `ensure_console_encoding()` 已定的策略：**只动 errors 策略、不动 encoding**
+    —— 中文仍按原编码正确写入，装不下的符号退化成 U+FFFD，而不是让整条日志消失。
+
+    **必须在 oasis / camel 被 import 之后调用** —— handler 是它们 import 时建的。
+    只处理当时已有的 handler，所以调用点要放在 import 之后而不是 `main()` 开头。
+    对已经 `errors="replace"` 的流是空操作，可重复调用。
+    """
+    import logging
+
+    fixed = 0
+    loggers = [logging.getLogger()] + [
+        logging.getLogger(name) for name in list(logging.root.manager.loggerDict)
+    ]
+    for lg in loggers:
+        for h in list(lg.handlers):
+            stream = getattr(h, "stream", None)
+            if stream is None or getattr(stream, "errors", None) == "replace":
+                continue
+            try:
+                stream.reconfigure(errors="replace")
+                fixed += 1
+            except (AttributeError, ValueError, OSError):
+                # 不是 TextIOWrapper（StringIO、socket 流、已关闭的流等）。
+                # **不报错**：这里的目标是「能改的改掉」，不是「保证全都改掉」。
+                continue
+    return fixed
+
+
 def _load_dotenv(path: Path) -> None:
     """极简 .env 解析。
 

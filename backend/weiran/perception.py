@@ -420,6 +420,104 @@ def phase_schedule(
     return {r: tuple(v) for r, v in sorted(schedule.items())}, dpr, compressed
 
 
+@dataclass(frozen=True)
+class Event:
+    """金标 `event_order` 里的一条事件。
+
+    **它和 `Phase` 是两个粒度的东西，别混。** `phases` 是 5 个阶段（引爆 /
+    口径质疑 / 删帖争议 / 外部介入 / 收束），每个带一个概括性的 `trigger`；
+    `event_order` 是 17 条按天排的事件明细（「论坛出现首个质疑帖」「学工部
+    下发劝删通知」「自媒体加入转载」…）。**前者是章节，后者是日程。**
+
+    字段刻意与 `Phase` 同名（`day` / `trigger` / `phase_id`），这样注入循环
+    和 `knowledge_cutoff_by_round` 对两者一视同仁 —— 不需要在调用方写
+    「如果是事件就…否则…」的分支。
+
+    `phase_id` 不是金标给的，是**按天**推出来的（见 `load_events`）：
+    事件属于「day ≤ 自己」里 day 最大的那个阶段。
+    """
+
+    seq: int
+    day: int
+    trigger: str
+    phase_id: str = ""
+
+
+def load_events(scenario_dir: str | Path) -> list[Event]:
+    """读 `reference_data.json` 的 `event_order` 段，并按天贴上阶段归属。
+
+    **`event_order` 在本项目里一直是死数据** —— 金标写了 17 条带日期的事件，
+    而没有任何代码读过它：注入只用 `phases` 那 5 条 `trigger`。于是「金标说
+    那天发生的事」与「仿真里那天发生的事」差了 12 条，而这件事不报错、
+    不提示（场景再稀也照样跑完）。
+
+    贴阶段用的是**上界**语义（`day ≤ 事件日` 里最近的那个阶段），与
+    `active_phase_by_round` 一致；两者不一致会让同一个日子在「注入标签」
+    和「阶段标签」里落到不同阶段。
+
+    Raises:
+        KnowledgeError: 文件缺失、没有 `event_order` 段、或缺少 `phases`
+            （没有阶段就贴不出归属，宁可报错也不留空 `phase_id`）。
+    """
+    p = Path(scenario_dir) / "reference_data.json"
+    if not p.is_file():
+        raise KnowledgeError(f"缺少 {p}")
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    phases = load_phases(scenario_dir)          # 顺带做「必须有 phases」的检查
+
+    rows = raw.get("event_order")
+    if not rows:
+        raise KnowledgeError(
+            f"{p} 里没有 event_order 段 —— 场景没有事件日程，"
+            "要注入就只能退回 phases 的概括性 trigger"
+        )
+
+    ordered = sorted(phases, key=lambda x: x.day)
+    out: list[Event] = []
+    for x in rows:
+        day = int(x["day"])
+        # 上界语义：day ≤ 事件日 中 day 最大的阶段。day 0 的事件落到 P1。
+        owner = ordered[0].phase_id
+        for ph in ordered:
+            if ph.day <= day:
+                owner = ph.phase_id
+            else:
+                break
+        out.append(Event(seq=int(x.get("seq", len(out) + 1)), day=day,
+                         trigger=str(x["event"]), phase_id=owner))
+    return sorted(out, key=lambda e: (e.day, e.seq))
+
+
+def event_schedule(
+    events: list[Event], phases: list[Phase], rounds: int
+) -> tuple[dict[int, tuple[Event, ...]], list[Event]]:
+    """事件日程 -> {轮号: 该轮要注入的事件}。
+
+    **轮-天映射仍然由阶段表决定，不由事件表决定。** 这一条是硬的：
+    `days_per_round` 按「末阶段 day + 1」判压缩（`span=14` → 15 轮即
+    round=day），而 `event_order` 里有一条 **day 28** 的收尾事件。若拿事件表
+    算跨度，同样的 15 轮会被判成压缩模式（每轮 2 天），**整条曲线跟着变形，
+    而且变形的原因藏在数据里、看不出来**。
+
+    Returns:
+        (轮号 -> 事件元组, 落在窗口外的事件)。窗口 = `rounds * dpr` 天。
+        **窗口外的事件要报出来，不许静默丢** —— 丢的是「金标说那天发生了事」，
+        而这件事恰好会在简报里被读成「那一轮没有信息」。
+    """
+    dpr, _ = days_per_round(phases, rounds)
+    covered = rounds * dpr
+    inside = [e for e in events if e.day < covered]
+    outside = [e for e in events if e.day >= covered]
+
+    schedule: dict[int, list[Event]] = {}
+    for e in inside:
+        r = round(e.day / dpr)
+        if r >= rounds:
+            r = rounds - 1          # 浮点边界兜底，与 phase_schedule 同策略
+        schedule.setdefault(r, []).append(e)
+    return {r: tuple(v) for r, v in sorted(schedule.items())}, outside
+
+
 def active_phase_by_round(
     phases: list[Phase], rounds: int, dpr: float
 ) -> dict[int, str]:

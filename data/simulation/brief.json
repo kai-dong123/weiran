@@ -1,7 +1,7 @@
 {
   "provenance": {
     "rounds_file": "D:\\open_source\\weiran\\data\\simulation\\twitter_rounds.json",
-    "rounds_sha256": "56f4def383aa4743",
+    "rounds_sha256": "ab4a3e0070a41aef",
     "scenario_dir": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis",
     "scenario_file": "D:\\open_source\\weiran\\benchmark\\scenarios\\employment_trust_crisis\\reference_data.json",
     "scenario_sha256": "9f14e8578aa4bd45",
@@ -9,7 +9,7 @@
   },
   "meta": {
     "rounds": 15,
-    "agents": 3,
+    "agents": 27,
     "platform": "twitter",
     "seed_text": "",
     "days_per_round": 1.0,
@@ -19,8 +19,12 @@
     "knowledge_on": true,
     "feedback_on": true,
     "world_state": true,
-    "total_seconds": 110.66,
-    "total_actions": 88
+    "total_seconds": 657.49,
+    "total_actions": 774,
+    "context_limit": 16384,
+    "truncations": 767,
+    "truncation_unparsed": 0,
+    "truncation_worst_dropped": 1234443
   },
   "days_per_round": 1.0,
   "coverage": {
@@ -58,10 +62,10 @@
       "day_skew": 0.0,
       "coverage": "exclusive",
       "shared_with": [],
-      "actual_from_fork": 0.7694,
-      "branch_a": 0.8427,
+      "actual_from_fork": 0.0,
+      "branch_a": 0.0,
       "branch_b": null,
-      "delta_a": 0.0733,
+      "delta_a": 0.0,
       "delta_b": null,
       "note": "分叉点为基线（该阶段是首轮，没有前一轮）；本窗口不涉及劝删，不设机制版"
     },
@@ -78,10 +82,10 @@
       "day_skew": 0.0,
       "coverage": "exclusive",
       "shared_with": [],
-      "actual_from_fork": 0.7694,
-      "branch_a": 0.8565,
+      "actual_from_fork": 0.0,
+      "branch_a": 0.0,
       "branch_b": null,
-      "delta_a": 0.0871,
+      "delta_a": 0.0,
       "delta_b": null,
       "note": "本窗口不涉及劝删，不设机制版"
     },
@@ -98,11 +102,11 @@
       "day_skew": 0.0,
       "coverage": "exclusive",
       "shared_with": [],
-      "actual_from_fork": 0.7694,
-      "branch_a": 0.8679,
-      "branch_b": 0.8704,
-      "delta_a": 0.0985,
-      "delta_b": 0.101,
+      "actual_from_fork": 0.0,
+      "branch_a": 0.0025,
+      "branch_b": 0.4411,
+      "delta_a": 0.0025,
+      "delta_b": 0.4411,
       "note": ""
     },
     {
@@ -118,10 +122,10 @@
       "day_skew": 0.0,
       "coverage": "exclusive",
       "shared_with": [],
-      "actual_from_fork": 0.7693,
-      "branch_a": 0.8297,
+      "actual_from_fork": 0.0,
+      "branch_a": 0.0,
       "branch_b": null,
-      "delta_a": 0.0604,
+      "delta_a": 0.0,
       "delta_b": null,
       "note": "本窗口不涉及劝删，不设机制版"
     },
@@ -138,10 +142,10 @@
       "day_skew": 0.0,
       "coverage": "exclusive",
       "shared_with": [],
-      "actual_from_fork": 0.7694,
-      "branch_a": 0.7852,
+      "actual_from_fork": 0.0,
+      "branch_a": 0.0995,
       "branch_b": null,
-      "delta_a": 0.0158,
+      "delta_a": 0.0995,
       "delta_b": null,
       "note": "本窗口不涉及劝删，不设机制版"
     }
@@ -149,373 +153,709 @@
   "rounds": [
     {
       "index": 0,
+      "n_behaviors": 21,
+      "n_actions": 26,
+      "n_talk_actions": 21,
+      "n_participants": 26,
+      "n_speakers": 21,
+      "volume": 0.9896,
+      "railed": [],
       "phase_id": "P1",
       "phase_label": "P1",
       "behaviors": [
         "disclosure",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "reassurance",
+        "discussion",
+        "discussion",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "testimony",
+        "reassurance",
+        "discussion",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "disclosure",
         "discussion"
       ],
       "behavior_counts": {
-        "disclosure": 1,
-        "discussion": 1
+        "disclosure": 2,
+        "discussion": 14,
+        "reassurance": 2,
+        "testimony": 3
       },
       "state": {
-        "attention": 0.077,
-        "panic": 0.0904,
-        "trust": 0.7092,
-        "polarization": 0.0916,
-        "risk": 0.0815,
-        "stability": 0.8601
+        "attention": 0.1316,
+        "panic": 0.1221,
+        "trust": 0.6843,
+        "polarization": 0.1009,
+        "risk": 0.1097,
+        "stability": 0.854
       },
       "deltas": {
-        "attention": 0.027,
-        "panic": -0.0096,
-        "trust": 0.0092,
-        "polarization": -0.0084,
-        "risk": -0.0185,
-        "stability": 0.0101
+        "attention": 0.0816,
+        "panic": 0.0221,
+        "trust": -0.0157,
+        "polarization": 0.0009,
+        "risk": 0.0097,
+        "stability": 0.004
       },
       "excitation": {
-        "attention": 0.0429,
-        "panic": -0.0111,
-        "trust": 0.009,
-        "polarization": -0.0067,
-        "risk": -0.02,
-        "stability": 0.0083
+        "attention": 0.1296,
+        "panic": 0.0268,
+        "trust": -0.0164,
+        "polarization": 0.0013,
+        "risk": -0.0039,
+        "stability": 0.0064
       },
       "relaxation": {
-        "attention": -0.0159,
-        "panic": 0.0033,
-        "trust": -0.0004,
-        "polarization": 0.0002,
-        "risk": 0.0013,
+        "attention": -0.048,
+        "panic": -0.0078,
+        "trust": 0.0008,
+        "polarization": -0.0,
+        "risk": 0.0003,
+        "stability": -0.0002
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0031,
+        "trust": -0.0001,
+        "polarization": -0.0004,
+        "risk": 0.0133,
+        "stability": -0.0021
+      },
+      "events": [],
+      "injected_count": 27,
+      "calls": 26,
+      "llm_seconds": 47.38,
+      "prompt_tokens": 33775,
+      "completion_tokens": 3836,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 3.25
+    },
+    {
+      "index": 1,
+      "n_behaviors": 49,
+      "n_actions": 79,
+      "n_talk_actions": 49,
+      "n_participants": 27,
+      "n_speakers": 26,
+      "volume": 1.0,
+      "railed": [],
+      "phase_id": "",
+      "phase_label": "P1",
+      "behaviors": [
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "reassurance",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "disclosure",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "reassurance",
+        "reassurance",
+        "discussion",
+        "testimony",
+        "reassurance",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "discussion": 37,
+        "reassurance": 4,
+        "disclosure": 4,
+        "testimony": 4
+      },
+      "state": {
+        "attention": 0.1773,
+        "panic": 0.1402,
+        "trust": 0.672,
+        "polarization": 0.1001,
+        "risk": 0.125,
+        "stability": 0.8558
+      },
+      "deltas": {
+        "attention": 0.0456,
+        "panic": 0.0182,
+        "trust": -0.0123,
+        "polarization": -0.0008,
+        "risk": 0.0152,
+        "stability": 0.0018
+      },
+      "excitation": {
+        "attention": 0.1204,
+        "panic": 0.0269,
+        "trust": -0.0138,
+        "polarization": -0.0011,
+        "risk": -0.0067,
+        "stability": 0.0055
+      },
+      "relaxation": {
+        "attention": -0.0748,
+        "panic": -0.0143,
+        "trust": 0.0014,
+        "polarization": 0.0,
+        "risk": -0.0002,
         "stability": -0.0003
       },
       "coupling": {
         "attention": 0.0,
-        "panic": -0.0017,
-        "trust": 0.0007,
-        "polarization": -0.0019,
-        "risk": 0.0002,
-        "stability": 0.0021
+        "panic": 0.0056,
+        "trust": 0.0,
+        "polarization": 0.0003,
+        "risk": 0.0221,
+        "stability": -0.0034
       },
       "events": [],
-      "injected_count": 3,
-      "calls": 2,
-      "llm_seconds": 4.03,
-      "prompt_tokens": 2659,
-      "completion_tokens": 309,
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 52.94,
+      "prompt_tokens": 81627,
+      "completion_tokens": 4522,
       "errors": 0,
       "failures": 0,
-      "slowest": 2.19
-    },
-    {
-      "index": 1,
-      "phase_id": "",
-      "phase_label": "P1",
-      "behaviors": [
-        "disclosure",
-        "disclosure",
-        "disclosure"
-      ],
-      "behavior_counts": {
-        "disclosure": 3
-      },
-      "state": {
-        "attention": 0.1234,
-        "panic": 0.0513,
-        "trust": 0.7398,
-        "polarization": 0.0655,
-        "risk": 0.0236,
-        "stability": 0.8927
-      },
-      "deltas": {
-        "attention": 0.0464,
-        "panic": -0.0392,
-        "trust": 0.0305,
-        "polarization": -0.0261,
-        "risk": -0.0579,
-        "stability": 0.0326
-      },
-      "excitation": {
-        "attention": 0.0896,
-        "panic": -0.0489,
-        "trust": 0.0297,
-        "polarization": -0.0195,
-        "risk": -0.0586,
-        "stability": 0.0242
-      },
-      "relaxation": {
-        "attention": -0.0431,
-        "panic": 0.0171,
-        "trust": -0.0019,
-        "polarization": 0.0006,
-        "risk": 0.0052,
-        "stability": -0.0012
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0074,
-        "trust": 0.0027,
-        "polarization": -0.0072,
-        "risk": -0.0044,
-        "stability": 0.0096
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 8.8,
-      "prompt_tokens": 7181,
-      "completion_tokens": 501,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 3.44
+      "slowest": 3.86
     },
     {
       "index": 2,
+      "n_behaviors": 23,
+      "n_actions": 51,
+      "n_talk_actions": 23,
+      "n_participants": 27,
+      "n_speakers": 21,
+      "volume": 0.9937,
+      "railed": [],
       "phase_id": "P2",
       "phase_label": "P2",
       "behaviors": [
         "amplification",
-        "discussion"
-      ],
-      "behavior_counts": {
-        "amplification": 1,
-        "discussion": 1
-      },
-      "state": {
-        "attention": 0.1426,
-        "panic": 0.0844,
-        "trust": 0.7237,
-        "polarization": 0.0955,
-        "risk": 0.0702,
-        "stability": 0.8925
-      },
-      "deltas": {
-        "attention": 0.0191,
-        "panic": 0.0332,
-        "trust": -0.0161,
-        "polarization": 0.03,
-        "risk": 0.0466,
-        "stability": -0.0002
-      },
-      "excitation": {
-        "attention": 0.0735,
-        "panic": 0.0334,
-        "trust": -0.015,
-        "polarization": 0.0334,
-        "risk": 0.0401,
-        "stability": 0.0
-      },
-      "relaxation": {
-        "attention": -0.0544,
-        "panic": 0.0045,
-        "trust": -0.0012,
-        "polarization": 0.0,
-        "risk": 0.0024,
-        "stability": -0.0015
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0047,
-        "trust": 0.0001,
-        "polarization": -0.0034,
-        "risk": 0.0041,
-        "stability": 0.0013
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 2,
-      "llm_seconds": 2.28,
-      "prompt_tokens": 8379,
-      "completion_tokens": 59,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 1.17
-    },
-    {
-      "index": 3,
-      "phase_id": "",
-      "phase_label": "P2",
-      "behaviors": [
+        "testimony",
+        "discussion",
+        "testimony",
+        "reassurance",
+        "testimony",
+        "discussion",
         "disclosure",
+        "testimony",
+        "testimony",
         "discussion",
         "discussion",
         "discussion",
-        "disclosure"
+        "contradiction",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "amplification",
+        "amplification"
       ],
       "behavior_counts": {
-        "disclosure": 2,
-        "discussion": 3
+        "amplification": 3,
+        "testimony": 5,
+        "discussion": 12,
+        "reassurance": 1,
+        "disclosure": 1,
+        "contradiction": 1
       },
       "state": {
-        "attention": 0.1642,
-        "panic": 0.0709,
-        "trust": 0.7387,
-        "polarization": 0.0777,
-        "risk": 0.041,
-        "stability": 0.911
+        "attention": 0.2513,
+        "panic": 0.1963,
+        "trust": 0.6191,
+        "polarization": 0.162,
+        "risk": 0.2219,
+        "stability": 0.8394
       },
       "deltas": {
-        "attention": 0.0217,
-        "panic": -0.0136,
-        "trust": 0.0151,
-        "polarization": -0.0179,
-        "risk": -0.0293,
-        "stability": 0.0184
+        "attention": 0.074,
+        "panic": 0.0561,
+        "trust": -0.0528,
+        "polarization": 0.0619,
+        "risk": 0.0969,
+        "stability": -0.0163
       },
       "excitation": {
-        "attention": 0.0887,
-        "panic": -0.0151,
-        "trust": 0.0153,
-        "polarization": -0.0121,
-        "risk": -0.0363,
-        "stability": 0.015
+        "attention": 0.1923,
+        "panic": 0.0746,
+        "trust": -0.0513,
+        "polarization": 0.0554,
+        "risk": 0.0589,
+        "stability": 0.0029
       },
       "relaxation": {
-        "attention": -0.0671,
-        "panic": 0.009,
-        "trust": -0.0019,
-        "polarization": 0.0004,
-        "risk": 0.0044,
-        "stability": -0.002
+        "attention": -0.1182,
+        "panic": -0.0336,
+        "trust": 0.0038,
+        "polarization": -0.0013,
+        "risk": -0.0056,
+        "stability": -0.0003
       },
       "coupling": {
         "attention": 0.0,
-        "panic": -0.0074,
-        "trust": 0.0016,
-        "polarization": -0.0062,
-        "risk": 0.0026,
-        "stability": 0.0054
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 6.25,
-      "prompt_tokens": 16204,
-      "completion_tokens": 602,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 3.61
-    },
-    {
-      "index": 4,
-      "phase_id": "",
-      "phase_label": "P2",
-      "behaviors": [
-        "disclosure"
-      ],
-      "behavior_counts": {
-        "disclosure": 1
-      },
-      "state": {
-        "attention": 0.1415,
-        "panic": 0.0581,
-        "trust": 0.7495,
-        "polarization": 0.0641,
-        "risk": 0.0232,
-        "stability": 0.9259
-      },
-      "deltas": {
-        "attention": -0.0227,
-        "panic": -0.0128,
-        "trust": 0.0108,
-        "polarization": -0.0135,
-        "risk": -0.0178,
-        "stability": 0.015
-      },
-      "excitation": {
-        "attention": 0.0311,
-        "panic": -0.017,
-        "trust": 0.0103,
-        "polarization": -0.0068,
-        "risk": -0.0203,
-        "stability": 0.0084
-      },
-      "relaxation": {
-        "attention": -0.0538,
-        "panic": 0.0135,
-        "trust": -0.0024,
-        "polarization": 0.0007,
-        "risk": 0.0053,
-        "stability": -0.0024
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0093,
-        "trust": 0.0028,
-        "polarization": -0.0074,
-        "risk": -0.0027,
-        "stability": 0.009
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 5.34,
-      "prompt_tokens": 22254,
-      "completion_tokens": 300,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 2.31
-    },
-    {
-      "index": 5,
-      "phase_id": "P3",
-      "phase_label": "P3",
-      "behaviors": [
-        "suppression",
-        "discussion"
-      ],
-      "behavior_counts": {
-        "suppression": 1,
-        "discussion": 1
-      },
-      "state": {
-        "attention": 0.1424,
-        "panic": 0.0955,
-        "trust": 0.6899,
-        "polarization": 0.1212,
-        "risk": 0.0846,
-        "stability": 0.8902
-      },
-      "deltas": {
-        "attention": 0.0008,
-        "panic": 0.0374,
-        "trust": -0.0596,
-        "polarization": 0.0571,
-        "risk": 0.0614,
-        "stability": -0.0358
-      },
-      "excitation": {
-        "attention": 0.0551,
-        "panic": 0.0334,
-        "trust": -0.0576,
-        "polarization": 0.0601,
-        "risk": 0.0501,
-        "stability": -0.0301
-      },
-      "relaxation": {
-        "attention": -0.0543,
-        "panic": 0.0025,
-        "trust": 0.0004,
-        "polarization": -0.0006,
-        "risk": 0.0018,
-        "stability": -0.0016
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": 0.0015,
-        "trust": -0.0024,
-        "polarization": -0.0025,
-        "risk": 0.0095,
-        "stability": -0.0041
+        "panic": 0.0151,
+        "trust": -0.0054,
+        "polarization": 0.0078,
+        "risk": 0.0436,
+        "stability": -0.019
       },
       "events": [
         {
           "kind": "polarization_surge",
           "dimension": "polarization",
-          "magnitude": 0.0571,
-          "message": "极化加速上升（+0.057）"
+          "magnitude": 0.0619,
+          "message": "极化加速上升（+0.062）"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 26,
+      "llm_seconds": 129.92,
+      "prompt_tokens": 129202,
+      "completion_tokens": 2302,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 9.14
+    },
+    {
+      "index": 3,
+      "n_behaviors": 22,
+      "n_actions": 47,
+      "n_talk_actions": 22,
+      "n_participants": 27,
+      "n_speakers": 20,
+      "volume": 0.9919,
+      "railed": [],
+      "phase_id": "",
+      "phase_label": "P2",
+      "behaviors": [
+        "disclosure",
+        "reassurance",
+        "discussion",
+        "discussion",
+        "amplification",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "testimony",
+        "contradiction",
+        "discussion",
+        "reassurance",
+        "testimony",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "disclosure": 2,
+        "reassurance": 2,
+        "discussion": 14,
+        "amplification": 1,
+        "testimony": 2,
+        "contradiction": 1
+      },
+      "state": {
+        "attention": 0.2677,
+        "panic": 0.2147,
+        "trust": 0.5898,
+        "polarization": 0.1901,
+        "risk": 0.2776,
+        "stability": 0.8208
+      },
+      "deltas": {
+        "attention": 0.0164,
+        "panic": 0.0184,
+        "trust": -0.0293,
+        "polarization": 0.028,
+        "risk": 0.0557,
+        "stability": -0.0187
+      },
+      "excitation": {
+        "attention": 0.1443,
+        "panic": 0.0369,
+        "trust": -0.0267,
+        "polarization": 0.0172,
+        "risk": 0.0135,
+        "stability": 0.0061
+      },
+      "relaxation": {
+        "attention": -0.1279,
+        "panic": -0.039,
+        "trust": 0.0052,
+        "polarization": -0.0018,
+        "risk": -0.0091,
+        "stability": 0.0002
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0205,
+        "trust": -0.0077,
+        "polarization": 0.0126,
+        "risk": 0.0513,
+        "stability": -0.0249
+      },
+      "events": [],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 449.77,
+      "prompt_tokens": 185276,
+      "completion_tokens": 3236,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 43.36
+    },
+    {
+      "index": 4,
+      "n_behaviors": 27,
+      "n_actions": 56,
+      "n_talk_actions": 27,
+      "n_participants": 27,
+      "n_speakers": 22,
+      "volume": 0.9977,
+      "railed": [],
+      "phase_id": "",
+      "phase_label": "P2",
+      "behaviors": [
+        "reassurance",
+        "discussion",
+        "disclosure",
+        "discussion",
+        "testimony",
+        "disclosure",
+        "testimony",
+        "discussion",
+        "reassurance",
+        "discussion",
+        "discussion",
+        "testimony",
+        "testimony",
+        "testimony",
+        "discussion",
+        "discussion",
+        "reassurance",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "reassurance": 3,
+        "discussion": 17,
+        "disclosure": 2,
+        "testimony": 5
+      },
+      "state": {
+        "attention": 0.2709,
+        "panic": 0.2294,
+        "trust": 0.5619,
+        "polarization": 0.2117,
+        "risk": 0.3255,
+        "stability": 0.7972
+      },
+      "deltas": {
+        "attention": 0.0032,
+        "panic": 0.0147,
+        "trust": -0.0279,
+        "polarization": 0.0217,
+        "risk": 0.0479,
+        "stability": -0.0235
+      },
+      "excitation": {
+        "attention": 0.133,
+        "panic": 0.0319,
+        "trust": -0.0249,
+        "polarization": 0.0071,
+        "risk": 0.003,
+        "stability": 0.005
+      },
+      "relaxation": {
+        "attention": -0.1298,
+        "panic": -0.0429,
+        "trust": 0.0065,
+        "polarization": -0.0022,
+        "risk": -0.0121,
+        "stability": 0.0008
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0257,
+        "trust": -0.0095,
+        "polarization": 0.0169,
+        "risk": 0.0569,
+        "stability": -0.0293
+      },
+      "events": [],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 42.35,
+      "prompt_tokens": 249085,
+      "completion_tokens": 2807,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 2.77
+    },
+    {
+      "index": 5,
+      "n_behaviors": 27,
+      "n_actions": 57,
+      "n_talk_actions": 27,
+      "n_participants": 27,
+      "n_speakers": 23,
+      "volume": 0.9977,
+      "railed": [],
+      "phase_id": "P3",
+      "phase_label": "P3",
+      "behaviors": [
+        "suppression",
+        "testimony",
+        "suppression",
+        "reassurance",
+        "contradiction",
+        "discussion",
+        "discussion",
+        "discussion",
+        "suppression",
+        "discussion",
+        "discussion",
+        "discussion",
+        "amplification",
+        "testimony",
+        "testimony",
+        "testimony",
+        "testimony",
+        "discussion",
+        "discussion",
+        "discussion",
+        "reassurance",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "discussion",
+        "contradiction"
+      ],
+      "behavior_counts": {
+        "suppression": 3,
+        "testimony": 6,
+        "reassurance": 2,
+        "contradiction": 2,
+        "discussion": 13,
+        "amplification": 1
+      },
+      "state": {
+        "attention": 0.3021,
+        "panic": 0.299,
+        "trust": 0.4448,
+        "polarization": 0.3308,
+        "risk": 0.4736,
+        "stability": 0.7172
+      },
+      "deltas": {
+        "attention": 0.0311,
+        "panic": 0.0697,
+        "trust": -0.1171,
+        "polarization": 0.119,
+        "risk": 0.1481,
+        "stability": -0.08
+      },
+      "excitation": {
+        "attention": 0.1792,
+        "panic": 0.0857,
+        "trust": -0.1088,
+        "polarization": 0.0947,
+        "risk": 0.0857,
+        "stability": -0.0272
+      },
+      "relaxation": {
+        "attention": -0.1481,
+        "panic": -0.063,
+        "trust": 0.0119,
+        "polarization": -0.0047,
+        "risk": -0.0208,
+        "stability": 0.0027
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.047,
+        "trust": -0.0202,
+        "polarization": 0.029,
+        "risk": 0.0833,
+        "stability": -0.0556
+      },
+      "events": [
+        {
+          "kind": "trust_drop",
+          "dimension": "trust",
+          "magnitude": -0.1171,
+          "message": "信任单日跌幅 0.117，超过阈值 0.06"
+        },
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.119,
+          "message": "极化加速上升（+0.119）"
+        },
+        {
+          "kind": "suppression_detected",
+          "dimension": "trust",
+          "magnitude": 3.0,
+          "message": "检出压制类行为 3 条 —— 议题可能从「事实争议」转为「动机争议」"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 26,
+      "llm_seconds": 46.04,
+      "prompt_tokens": 291989,
+      "completion_tokens": 2931,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 3.58
+    },
+    {
+      "index": 6,
+      "n_behaviors": 22,
+      "n_actions": 59,
+      "n_talk_actions": 22,
+      "n_participants": 27,
+      "n_speakers": 17,
+      "volume": 0.9919,
+      "railed": [],
+      "phase_id": "",
+      "phase_label": "P3",
+      "behaviors": [
+        "discussion",
+        "discussion",
+        "disclosure",
+        "disclosure",
+        "reassurance",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "testimony",
+        "discussion",
+        "suppression",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
+        "contradiction",
+        "amplification"
+      ],
+      "behavior_counts": {
+        "discussion": 14,
+        "disclosure": 3,
+        "reassurance": 1,
+        "testimony": 1,
+        "suppression": 1,
+        "contradiction": 1,
+        "amplification": 1
+      },
+      "state": {
+        "attention": 0.3082,
+        "panic": 0.3228,
+        "trust": 0.4018,
+        "polarization": 0.3924,
+        "risk": 0.56,
+        "stability": 0.6567
+      },
+      "deltas": {
+        "attention": 0.0061,
+        "panic": 0.0238,
+        "trust": -0.0431,
+        "polarization": 0.0616,
+        "risk": 0.0864,
+        "stability": -0.0605
+      },
+      "excitation": {
+        "attention": 0.1578,
+        "panic": 0.0389,
+        "trust": -0.0314,
+        "polarization": 0.0307,
+        "risk": 0.0209,
+        "stability": 0.003
+      },
+      "relaxation": {
+        "attention": -0.1517,
+        "panic": -0.0697,
+        "trust": 0.0138,
+        "polarization": -0.006,
+        "risk": -0.0264,
+        "stability": 0.0044
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0545,
+        "trust": -0.0256,
+        "polarization": 0.0368,
+        "risk": 0.092,
+        "stability": -0.0679
+      },
+      "events": [
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.0616,
+          "message": "极化加速上升（+0.062）"
         },
         {
           "kind": "suppression_detected",
@@ -524,547 +864,780 @@
           "message": "检出压制类行为 1 条 —— 议题可能从「事实争议」转为「动机争议」"
         }
       ],
-      "injected_count": 3,
-      "calls": 2,
-      "llm_seconds": 6.58,
-      "prompt_tokens": 18969,
-      "completion_tokens": 252,
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 67.92,
+      "prompt_tokens": 346230,
+      "completion_tokens": 2259,
       "errors": 0,
       "failures": 0,
-      "slowest": 3.78
-    },
-    {
-      "index": 6,
-      "phase_id": "",
-      "phase_label": "P3",
-      "behaviors": [
-        "disclosure",
-        "disclosure",
-        "disclosure"
-      ],
-      "behavior_counts": {
-        "disclosure": 3
-      },
-      "state": {
-        "attention": 0.1646,
-        "panic": 0.0586,
-        "trust": 0.7185,
-        "polarization": 0.0947,
-        "risk": 0.0339,
-        "stability": 0.9156
-      },
-      "deltas": {
-        "attention": 0.0223,
-        "panic": -0.037,
-        "trust": 0.0286,
-        "polarization": -0.0265,
-        "risk": -0.0507,
-        "stability": 0.0254
-      },
-      "excitation": {
-        "attention": 0.0896,
-        "panic": -0.0489,
-        "trust": 0.0297,
-        "polarization": -0.0195,
-        "risk": -0.0586,
-        "stability": 0.0242
-      },
-      "relaxation": {
-        "attention": -0.0673,
-        "panic": 0.0156,
-        "trust": -0.0009,
-        "polarization": -0.0,
-        "risk": 0.005,
-        "stability": -0.0022
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0037,
-        "trust": -0.0002,
-        "polarization": -0.0069,
-        "risk": 0.003,
-        "stability": 0.0034
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 23.62,
-      "prompt_tokens": 30774,
-      "completion_tokens": 422,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 10.16
+      "slowest": 5.03
     },
     {
       "index": 7,
+      "n_behaviors": 21,
+      "n_actions": 55,
+      "n_talk_actions": 21,
+      "n_participants": 27,
+      "n_speakers": 18,
+      "volume": 0.9896,
+      "railed": [],
       "phase_id": "",
       "phase_label": "P3",
       "behaviors": [
+        "suppression",
         "disclosure",
-        "disclosure"
+        "suppression",
+        "suppression",
+        "discussion",
+        "suppression",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "disclosure",
+        "suppression",
+        "disclosure",
+        "discussion",
+        "discussion",
+        "discussion",
+        "testimony",
+        "disclosure",
+        "suppression",
+        "discussion",
+        "discussion",
+        "discussion"
       ],
       "behavior_counts": {
-        "disclosure": 2
+        "suppression": 6,
+        "disclosure": 5,
+        "discussion": 9,
+        "testimony": 1
       },
       "state": {
-        "attention": 0.1608,
-        "panic": 0.0397,
-        "trust": 0.7387,
-        "polarization": 0.0719,
-        "risk": 0.0,
-        "stability": 0.9383
+        "attention": 0.3462,
+        "panic": 0.373,
+        "trust": 0.2835,
+        "polarization": 0.5504,
+        "risk": 0.7205,
+        "stability": 0.5244
       },
       "deltas": {
-        "attention": -0.0038,
-        "panic": -0.0189,
-        "trust": 0.0202,
-        "polarization": -0.0228,
-        "risk": -0.0339,
-        "stability": 0.0227
+        "attention": 0.038,
+        "panic": 0.0502,
+        "trust": -0.1182,
+        "polarization": 0.1581,
+        "risk": 0.1605,
+        "stability": -0.1323
       },
       "excitation": {
-        "attention": 0.0612,
-        "panic": -0.0334,
-        "trust": 0.0203,
-        "polarization": -0.0134,
-        "risk": -0.0401,
-        "stability": 0.0165
+        "attention": 0.212,
+        "panic": 0.0568,
+        "trust": -0.0973,
+        "polarization": 0.1169,
+        "risk": 0.081,
+        "stability": -0.0405
       },
       "relaxation": {
-        "attention": -0.0651,
-        "panic": 0.0219,
-        "trust": -0.0019,
-        "polarization": 0.0004,
-        "risk": 0.0071,
-        "stability": -0.0028
+        "attention": -0.174,
+        "panic": -0.0819,
+        "trust": 0.0191,
+        "polarization": -0.0093,
+        "risk": -0.0362,
+        "stability": 0.008
       },
       "coupling": {
         "attention": 0.0,
-        "panic": -0.0074,
-        "trust": 0.0018,
-        "polarization": -0.0099,
-        "risk": -0.0024,
-        "stability": 0.0089
+        "panic": 0.0753,
+        "trust": -0.04,
+        "polarization": 0.0505,
+        "risk": 0.1157,
+        "stability": -0.0998
       },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 5.03,
-      "prompt_tokens": 35647,
-      "completion_tokens": 282,
+      "events": [
+        {
+          "kind": "risk_alert",
+          "dimension": "risk",
+          "magnitude": 0.7205,
+          "message": "风险越过预警线 0.70（当前 0.721）"
+        },
+        {
+          "kind": "trust_drop",
+          "dimension": "trust",
+          "magnitude": -0.1182,
+          "message": "信任单日跌幅 0.118，超过阈值 0.06"
+        },
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.1581,
+          "message": "极化加速上升（+0.158）"
+        },
+        {
+          "kind": "suppression_detected",
+          "dimension": "trust",
+          "magnitude": 6.0,
+          "message": "检出压制类行为 6 条 —— 议题可能从「事实争议」转为「动机争议」"
+        },
+        {
+          "kind": "stability_break",
+          "dimension": "stability",
+          "magnitude": 0.5244,
+          "message": "稳定跌破 0.60（当前 0.524）"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 88.3,
+      "prompt_tokens": 372861,
+      "completion_tokens": 2921,
       "errors": 0,
       "failures": 0,
-      "slowest": 2.8
+      "slowest": 4.84
     },
     {
       "index": 8,
+      "n_behaviors": 17,
+      "n_actions": 49,
+      "n_talk_actions": 17,
+      "n_participants": 27,
+      "n_speakers": 17,
+      "volume": 0.9719,
+      "railed": [],
       "phase_id": "P4",
       "phase_label": "P4",
       "behaviors": [
         "amplification",
-        "disclosure"
-      ],
-      "behavior_counts": {
-        "amplification": 1,
-        "disclosure": 1
-      },
-      "state": {
-        "attention": 0.1776,
-        "panic": 0.057,
-        "trust": 0.7419,
-        "polarization": 0.0846,
-        "risk": 0.0268,
-        "stability": 0.9483
-      },
-      "deltas": {
-        "attention": 0.0169,
-        "panic": 0.0173,
-        "trust": 0.0032,
-        "polarization": 0.0128,
-        "risk": 0.0268,
-        "stability": 0.01
-      },
-      "excitation": {
-        "attention": 0.0918,
-        "panic": 0.0111,
-        "trust": 0.0045,
-        "polarization": 0.02,
-        "risk": 0.02,
-        "stability": 0.0083
-      },
-      "relaxation": {
-        "attention": -0.075,
-        "panic": 0.0144,
-        "trust": -0.0021,
-        "polarization": 0.0002,
-        "risk": 0.0054,
-        "stability": -0.0033
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0082,
-        "trust": 0.0008,
-        "polarization": -0.0075,
-        "risk": 0.0014,
-        "stability": 0.0051
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 2,
-      "llm_seconds": 2.33,
-      "prompt_tokens": 27279,
-      "completion_tokens": 60,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 1.36
-    },
-    {
-      "index": 9,
-      "phase_id": "",
-      "phase_label": "P4",
-      "behaviors": [
-        "disclosure"
-      ],
-      "behavior_counts": {
-        "disclosure": 1
-      },
-      "state": {
-        "attention": 0.15,
-        "panic": 0.0477,
-        "trust": 0.7519,
-        "polarization": 0.0696,
-        "risk": 0.0089,
-        "stability": 0.9617
-      },
-      "deltas": {
-        "attention": -0.0277,
-        "panic": -0.0093,
-        "trust": 0.0099,
-        "polarization": -0.015,
-        "risk": -0.0179,
-        "stability": 0.0133
-      },
-      "excitation": {
-        "attention": 0.0311,
-        "panic": -0.017,
-        "trust": 0.0103,
-        "polarization": -0.0068,
-        "risk": -0.0203,
-        "stability": 0.0084
-      },
-      "relaxation": {
-        "attention": -0.0587,
-        "panic": 0.0176,
-        "trust": -0.0025,
-        "polarization": 0.0005,
-        "risk": 0.0063,
-        "stability": -0.0036
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0099,
-        "trust": 0.0022,
-        "polarization": -0.0087,
-        "risk": -0.0038,
-        "stability": 0.0086
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 4.0,
-      "prompt_tokens": 42296,
-      "completion_tokens": 82,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 1.73
-    },
-    {
-      "index": 10,
-      "phase_id": "",
-      "phase_label": "P4",
-      "behaviors": [],
-      "behavior_counts": {},
-      "state": {
-        "attention": 0.113,
-        "panic": 0.0531,
-        "trust": 0.7523,
-        "polarization": 0.0618,
-        "risk": 0.0083,
-        "stability": 0.9675
-      },
-      "deltas": {
-        "attention": -0.037,
-        "panic": 0.0055,
-        "trust": 0.0005,
-        "polarization": -0.0078,
-        "risk": -0.0006,
-        "stability": 0.0058
-      },
-      "excitation": {
-        "attention": 0.0,
-        "panic": 0.0,
-        "trust": 0.0,
-        "polarization": 0.0,
-        "risk": 0.0,
-        "stability": 0.0
-      },
-      "relaxation": {
-        "attention": -0.037,
-        "panic": 0.0153,
-        "trust": -0.0025,
-        "polarization": 0.0007,
-        "risk": 0.0061,
-        "stability": -0.0038
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0099,
-        "trust": 0.003,
-        "polarization": -0.0085,
-        "risk": -0.0067,
-        "stability": 0.0096
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 4.81,
-      "prompt_tokens": 40946,
-      "completion_tokens": 188,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 2.36
-    },
-    {
-      "index": 11,
-      "phase_id": "",
-      "phase_label": "P4",
-      "behaviors": [],
-      "behavior_counts": {},
-      "state": {
-        "attention": 0.0897,
-        "panic": 0.0569,
-        "trust": 0.7535,
-        "polarization": 0.0541,
-        "risk": 0.006,
-        "stability": 0.9743
-      },
-      "deltas": {
-        "attention": -0.0233,
-        "panic": 0.0038,
-        "trust": 0.0012,
-        "polarization": -0.0077,
-        "risk": -0.0023,
-        "stability": 0.0068
-      },
-      "excitation": {
-        "attention": 0.0,
-        "panic": 0.0,
-        "trust": 0.0,
-        "polarization": 0.0,
-        "risk": 0.0,
-        "stability": 0.0
-      },
-      "relaxation": {
-        "attention": -0.0233,
-        "panic": 0.0137,
-        "trust": -0.0025,
-        "polarization": 0.0009,
-        "risk": 0.0061,
-        "stability": -0.004
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.01,
-        "trust": 0.0037,
-        "polarization": -0.0086,
-        "risk": -0.0085,
-        "stability": 0.0108
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 8.42,
-      "prompt_tokens": 43579,
-      "completion_tokens": 139,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 3.08
-    },
-    {
-      "index": 12,
-      "phase_id": "",
-      "phase_label": "P4",
-      "behaviors": [],
-      "behavior_counts": {},
-      "state": {
-        "attention": 0.075,
-        "panic": 0.0593,
-        "trust": 0.7554,
-        "polarization": 0.0464,
-        "risk": 0.0026,
-        "stability": 0.982
-      },
-      "deltas": {
-        "attention": -0.0147,
-        "panic": 0.0024,
-        "trust": 0.0019,
-        "polarization": -0.0077,
-        "risk": -0.0034,
-        "stability": 0.0078
-      },
-      "excitation": {
-        "attention": 0.0,
-        "panic": 0.0,
-        "trust": 0.0,
-        "polarization": 0.0,
-        "risk": 0.0,
-        "stability": 0.0
-      },
-      "relaxation": {
-        "attention": -0.0147,
-        "panic": 0.0126,
-        "trust": -0.0026,
-        "polarization": 0.001,
-        "risk": 0.0063,
-        "stability": -0.0042
-      },
-      "coupling": {
-        "attention": 0.0,
-        "panic": -0.0102,
-        "trust": 0.0045,
-        "polarization": -0.0088,
-        "risk": -0.0097,
-        "stability": 0.012
-      },
-      "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 5.3,
-      "prompt_tokens": 45318,
-      "completion_tokens": 170,
-      "errors": 0,
-      "failures": 0,
-      "slowest": 2.16
-    },
-    {
-      "index": 13,
-      "phase_id": "",
-      "phase_label": "P4",
-      "behaviors": [
+        "reassurance",
+        "discussion",
+        "disclosure",
+        "discussion",
+        "disclosure",
+        "testimony",
+        "testimony",
+        "testimony",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "discussion",
+        "contradiction",
+        "discussion",
         "discussion"
       ],
       "behavior_counts": {
-        "discussion": 1
+        "amplification": 1,
+        "reassurance": 1,
+        "discussion": 8,
+        "disclosure": 2,
+        "testimony": 4,
+        "contradiction": 1
       },
       "state": {
-        "attention": 0.0736,
-        "panic": 0.0652,
-        "trust": 0.7556,
-        "polarization": 0.0385,
-        "risk": 0.0002,
-        "stability": 0.9905
+        "attention": 0.3465,
+        "panic": 0.413,
+        "trust": 0.2232,
+        "polarization": 0.631,
+        "risk": 0.8318,
+        "stability": 0.4262
       },
       "deltas": {
-        "attention": -0.0014,
-        "panic": 0.0058,
-        "trust": 0.0001,
-        "polarization": -0.0079,
-        "risk": -0.0024,
-        "stability": 0.0085
+        "attention": 0.0002,
+        "panic": 0.04,
+        "trust": -0.0603,
+        "polarization": 0.0806,
+        "risk": 0.1113,
+        "stability": -0.0983
       },
       "excitation": {
-        "attention": 0.0124,
-        "panic": 0.0057,
-        "trust": -0.0025,
+        "attention": 0.1744,
+        "panic": 0.0481,
+        "trust": -0.0351,
+        "polarization": 0.0312,
+        "risk": 0.0265,
+        "stability": 0.0077
+      },
+      "relaxation": {
+        "attention": -0.1741,
+        "panic": -0.094,
+        "trust": 0.0218,
+        "polarization": -0.011,
+        "risk": -0.0433,
+        "stability": 0.0108
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.0859,
+        "trust": -0.0471,
+        "polarization": 0.0604,
+        "risk": 0.1282,
+        "stability": -0.1168
+      },
+      "events": [
+        {
+          "kind": "trust_drop",
+          "dimension": "trust",
+          "magnitude": -0.0603,
+          "message": "信任单日跌幅 0.060，超过阈值 0.06"
+        },
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.0806,
+          "message": "极化加速上升（+0.081）"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 26,
+      "llm_seconds": 88.33,
+      "prompt_tokens": 372613,
+      "completion_tokens": 2897,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 7.58
+    },
+    {
+      "index": 9,
+      "n_behaviors": 13,
+      "n_actions": 52,
+      "n_talk_actions": 13,
+      "n_participants": 27,
+      "n_speakers": 12,
+      "volume": 0.9253,
+      "railed": [
+        "risk"
+      ],
+      "phase_id": "",
+      "phase_label": "P4",
+      "behaviors": [
+        "discussion",
+        "testimony",
+        "suppression",
+        "discussion",
+        "contradiction",
+        "discussion",
+        "suppression",
+        "discussion",
+        "testimony",
+        "discussion",
+        "discussion",
+        "suppression",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "discussion": 7,
+        "testimony": 2,
+        "suppression": 3,
+        "contradiction": 1
+      },
+      "state": {
+        "attention": 0.3466,
+        "panic": 0.507,
+        "trust": 0.0502,
+        "polarization": 0.8225,
+        "risk": 1.0,
+        "stability": 0.2322
+      },
+      "deltas": {
+        "attention": 0.0002,
+        "panic": 0.094,
+        "trust": -0.173,
+        "polarization": 0.1915,
+        "risk": 0.1682,
+        "stability": -0.194
+      },
+      "excitation": {
+        "attention": 0.1744,
+        "panic": 0.0971,
+        "trust": -0.1383,
+        "polarization": 0.1281,
+        "risk": 0.1087,
+        "stability": -0.0524
+      },
+      "relaxation": {
+        "attention": -0.1742,
+        "panic": -0.1201,
+        "trust": 0.0297,
+        "polarization": -0.0151,
+        "risk": -0.0563,
+        "stability": 0.0162
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.1171,
+        "trust": -0.0644,
+        "polarization": 0.0784,
+        "risk": 0.161,
+        "stability": -0.1578
+      },
+      "events": [
+        {
+          "kind": "trust_drop",
+          "dimension": "trust",
+          "magnitude": -0.173,
+          "message": "信任单日跌幅 0.173，超过阈值 0.06"
+        },
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.1915,
+          "message": "极化加速上升（+0.191）"
+        },
+        {
+          "kind": "suppression_detected",
+          "dimension": "trust",
+          "magnitude": 3.0,
+          "message": "检出压制类行为 3 条 —— 议题可能从「事实争议」转为「动机争议」"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 103.42,
+      "prompt_tokens": 401578,
+      "completion_tokens": 1978,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 8.3
+    },
+    {
+      "index": 10,
+      "n_behaviors": 13,
+      "n_actions": 50,
+      "n_talk_actions": 13,
+      "n_participants": 27,
+      "n_speakers": 11,
+      "volume": 0.9253,
+      "railed": [
+        "trust",
+        "risk"
+      ],
+      "phase_id": "",
+      "phase_label": "P4",
+      "behaviors": [
+        "testimony",
+        "discussion",
+        "disclosure",
+        "discussion",
+        "testimony",
+        "testimony",
+        "discussion",
+        "testimony",
+        "contradiction",
+        "testimony",
+        "testimony",
+        "discussion",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "testimony": 6,
+        "discussion": 5,
+        "disclosure": 1,
+        "contradiction": 1
+      },
+      "state": {
+        "attention": 0.3467,
+        "panic": 0.5678,
+        "trust": 0.0,
+        "polarization": 0.931,
+        "risk": 1.0,
+        "stability": 0.0757
+      },
+      "deltas": {
+        "attention": 0.0001,
+        "panic": 0.0608,
+        "trust": -0.0502,
+        "polarization": 0.1085,
+        "risk": 0.0,
+        "stability": -0.1565
+      },
+      "excitation": {
+        "attention": 0.1744,
+        "panic": 0.0647,
+        "trust": -0.0553,
+        "polarization": 0.0388,
+        "risk": 0.033,
+        "stability": 0.0048
+      },
+      "relaxation": {
+        "attention": -0.1743,
+        "panic": -0.1382,
+        "trust": 0.0341,
+        "polarization": -0.0174,
+        "risk": -0.0625,
+        "stability": 0.0209
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.1342,
+        "trust": -0.0744,
+        "polarization": 0.0871,
+        "risk": 0.1804,
+        "stability": -0.1821
+      },
+      "events": [
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.1085,
+          "message": "极化加速上升（+0.108）"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 169.03,
+      "prompt_tokens": 403816,
+      "completion_tokens": 2851,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 11.62
+    },
+    {
+      "index": 11,
+      "n_behaviors": 12,
+      "n_actions": 51,
+      "n_talk_actions": 12,
+      "n_participants": 27,
+      "n_speakers": 11,
+      "volume": 0.9051,
+      "railed": [
+        "trust",
+        "polarization",
+        "risk",
+        "stability"
+      ],
+      "phase_id": "",
+      "phase_label": "P4",
+      "behaviors": [
+        "testimony",
+        "testimony",
+        "reassurance",
+        "discussion",
+        "reassurance",
+        "testimony",
+        "testimony",
+        "discussion",
+        "suppression",
+        "discussion",
+        "testimony",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "testimony": 5,
+        "reassurance": 2,
+        "discussion": 4,
+        "suppression": 1
+      },
+      "state": {
+        "attention": 0.3367,
+        "panic": 0.6256,
+        "trust": 0.0,
+        "polarization": 1.0,
+        "risk": 1.0,
+        "stability": 0.0
+      },
+      "deltas": {
+        "attention": -0.01,
+        "panic": 0.0578,
+        "trust": 0.0,
+        "polarization": 0.069,
+        "risk": 0.0,
+        "stability": -0.0757
+      },
+      "excitation": {
+        "attention": 0.1584,
+        "panic": 0.0634,
+        "trust": -0.0879,
+        "polarization": 0.0679,
+        "risk": 0.0617,
+        "stability": -0.0185
+      },
+      "relaxation": {
+        "attention": -0.1684,
+        "panic": -0.1556,
+        "trust": 0.0381,
+        "polarization": -0.0205,
+        "risk": -0.0644,
+        "stability": 0.027
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.15,
+        "trust": -0.0878,
+        "polarization": 0.0897,
+        "risk": 0.1975,
+        "stability": -0.2132
+      },
+      "events": [
+        {
+          "kind": "polarization_surge",
+          "dimension": "polarization",
+          "magnitude": 0.069,
+          "message": "极化加速上升（+0.069）"
+        },
+        {
+          "kind": "suppression_detected",
+          "dimension": "trust",
+          "magnitude": 1.0,
+          "message": "检出压制类行为 1 条 —— 议题可能从「事实争议」转为「动机争议」"
+        }
+      ],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 193.77,
+      "prompt_tokens": 394814,
+      "completion_tokens": 2895,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 17.44
+    },
+    {
+      "index": 12,
+      "n_behaviors": 10,
+      "n_actions": 48,
+      "n_talk_actions": 10,
+      "n_participants": 27,
+      "n_speakers": 9,
+      "volume": 0.8483,
+      "railed": [
+        "trust",
+        "polarization",
+        "risk",
+        "stability"
+      ],
+      "phase_id": "",
+      "phase_label": "P4",
+      "behaviors": [
+        "discussion",
+        "testimony",
+        "disclosure",
+        "discussion",
+        "testimony",
+        "reassurance",
+        "disclosure",
+        "discussion",
+        "testimony",
+        "disclosure"
+      ],
+      "behavior_counts": {
+        "discussion": 3,
+        "testimony": 3,
+        "disclosure": 3,
+        "reassurance": 1
+      },
+      "state": {
+        "attention": 0.3295,
+        "panic": 0.604,
+        "trust": 0.0,
+        "polarization": 1.0,
+        "risk": 1.0,
+        "stability": 0.0
+      },
+      "deltas": {
+        "attention": -0.0072,
+        "panic": -0.0216,
+        "trust": 0.0,
         "polarization": 0.0,
         "risk": 0.0,
         "stability": 0.0
       },
+      "excitation": {
+        "attention": 0.1569,
+        "panic": -0.0,
+        "trust": 0.0047,
+        "polarization": -0.0035,
+        "risk": -0.0208,
+        "stability": 0.0172
+      },
       "relaxation": {
-        "attention": -0.0139,
-        "panic": 0.0103,
-        "trust": -0.0026,
-        "polarization": 0.0012,
-        "risk": 0.0065,
-        "stability": -0.0045
+        "attention": -0.1642,
+        "panic": -0.1539,
+        "trust": 0.0336,
+        "polarization": -0.0205,
+        "risk": -0.0589,
+        "stability": 0.0284
       },
       "coupling": {
         "attention": 0.0,
-        "panic": -0.0101,
-        "trust": 0.0052,
-        "polarization": -0.0091,
-        "risk": -0.0089,
-        "stability": 0.0129
+        "panic": 0.1323,
+        "trust": -0.0876,
+        "polarization": 0.082,
+        "risk": 0.183,
+        "stability": -0.2124
       },
       "events": [],
-      "injected_count": 3,
-      "calls": 3,
-      "llm_seconds": 7.61,
-      "prompt_tokens": 46172,
-      "completion_tokens": 283,
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 229.64,
+      "prompt_tokens": 382454,
+      "completion_tokens": 2888,
       "errors": 0,
       "failures": 0,
-      "slowest": 3.31
+      "slowest": 20.56
+    },
+    {
+      "index": 13,
+      "n_behaviors": 8,
+      "n_actions": 49,
+      "n_talk_actions": 8,
+      "n_participants": 27,
+      "n_speakers": 8,
+      "volume": 0.7616,
+      "railed": [
+        "trust",
+        "polarization",
+        "risk",
+        "stability"
+      ],
+      "phase_id": "",
+      "phase_label": "P4",
+      "behaviors": [
+        "discussion",
+        "testimony",
+        "discussion",
+        "testimony",
+        "contradiction",
+        "discussion",
+        "reassurance",
+        "discussion"
+      ],
+      "behavior_counts": {
+        "discussion": 4,
+        "testimony": 2,
+        "contradiction": 1,
+        "reassurance": 1
+      },
+      "state": {
+        "attention": 0.295,
+        "panic": 0.6325,
+        "trust": 0.0,
+        "polarization": 1.0,
+        "risk": 1.0,
+        "stability": 0.0
+      },
+      "deltas": {
+        "attention": -0.0344,
+        "panic": 0.0285,
+        "trust": 0.0,
+        "polarization": 0.0,
+        "risk": 0.0,
+        "stability": 0.0
+      },
+      "excitation": {
+        "attention": 0.1095,
+        "panic": 0.0454,
+        "trust": -0.0565,
+        "polarization": 0.0312,
+        "risk": 0.0286,
+        "stability": 0.0
+      },
+      "relaxation": {
+        "attention": -0.1439,
+        "panic": -0.1609,
+        "trust": 0.0365,
+        "polarization": -0.0213,
+        "risk": -0.0622,
+        "stability": 0.029
+      },
+      "coupling": {
+        "attention": 0.0,
+        "panic": 0.144,
+        "trust": -0.091,
+        "polarization": 0.0866,
+        "risk": 0.1908,
+        "stability": -0.2208
+      },
+      "events": [],
+      "injected_count": 27,
+      "calls": 27,
+      "llm_seconds": 239.14,
+      "prompt_tokens": 373971,
+      "completion_tokens": 2779,
+      "errors": 0,
+      "failures": 0,
+      "slowest": 15.55
     },
     {
       "index": 14,
+      "n_behaviors": 9,
+      "n_actions": 45,
+      "n_talk_actions": 9,
+      "n_participants": 27,
+      "n_speakers": 8,
+      "volume": 0.8093,
+      "railed": [
+        "trust",
+        "polarization",
+        "risk",
+        "stability"
+      ],
       "phase_id": "P5",
       "phase_label": "P5",
       "behaviors": [
-        "disclosure"
+        "disclosure",
+        "discussion",
+        "discussion",
+        "contradiction",
+        "testimony",
+        "discussion",
+        "discussion",
+        "testimony",
+        "reassurance"
       ],
       "behavior_counts": {
-        "disclosure": 1
+        "disclosure": 1,
+        "discussion": 4,
+        "contradiction": 1,
+        "testimony": 2,
+        "reassurance": 1
       },
       "state": {
-        "attention": 0.0844,
-        "panic": 0.0508,
-        "trust": 0.7694,
-        "polarization": 0.0221,
-        "risk": 0.0,
-        "stability": 1.0
+        "attention": 0.2837,
+        "panic": 0.6384,
+        "trust": 0.0,
+        "polarization": 1.0,
+        "risk": 1.0,
+        "stability": 0.0
       },
       "deltas": {
-        "attention": 0.0109,
-        "panic": -0.0143,
-        "trust": 0.0138,
-        "polarization": -0.0164,
-        "risk": -0.0002,
-        "stability": 0.0095
+        "attention": -0.0114,
+        "panic": 0.006,
+        "trust": 0.0,
+        "polarization": 0.0,
+        "risk": 0.0,
+        "stability": 0.0
       },
       "excitation": {
-        "attention": 0.0311,
-        "panic": -0.017,
-        "trust": 0.0103,
-        "polarization": -0.0068,
-        "risk": -0.0203,
-        "stability": 0.0084
+        "attention": 0.1259,
+        "panic": 0.0307,
+        "trust": -0.0368,
+        "polarization": 0.0196,
+        "risk": 0.0123,
+        "stability": 0.0061
       },
       "relaxation": {
-        "attention": -0.0202,
-        "panic": 0.0152,
-        "trust": -0.0032,
-        "polarization": 0.0016,
-        "risk": 0.008,
-        "stability": -0.0051
+        "attention": -0.1373,
+        "panic": -0.1649,
+        "trust": 0.0356,
+        "polarization": -0.021,
+        "risk": -0.0611,
+        "stability": 0.0287
       },
       "coupling": {
         "attention": 0.0,
-        "panic": -0.0125,
-        "trust": 0.0067,
-        "polarization": -0.0112,
-        "risk": -0.0115,
-        "stability": 0.017
+        "panic": 0.1402,
+        "trust": -0.0899,
+        "polarization": 0.0851,
+        "risk": 0.1883,
+        "stability": -0.2195
       },
       "events": [],
-      "injected_count": 3,
-      "calls": 2,
-      "llm_seconds": 5.28,
-      "prompt_tokens": 29676,
-      "completion_tokens": 78,
+      "injected_count": 27,
+      "calls": 26,
+      "llm_seconds": 332.89,
+      "prompt_tokens": 357816,
+      "completion_tokens": 3376,
       "errors": 0,
       "failures": 0,
-      "slowest": 2.97
+      "slowest": 21.75
     }
   ],
   "turning_point": {
@@ -1078,16 +1651,152 @@
     },
     "detected_events": [
       {
-        "round": 5,
-        "phase": "P3",
+        "round": 2,
+        "phase": "P2",
         "kind": "polarization_surge",
         "dimension": "polarization",
-        "magnitude": 0.0571,
-        "message": "极化加速上升（+0.057）"
+        "magnitude": 0.0619,
+        "message": "极化加速上升（+0.062）"
       },
       {
         "round": 5,
         "phase": "P3",
+        "kind": "trust_drop",
+        "dimension": "trust",
+        "magnitude": -0.1171,
+        "message": "信任单日跌幅 0.117，超过阈值 0.06"
+      },
+      {
+        "round": 5,
+        "phase": "P3",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.119,
+        "message": "极化加速上升（+0.119）"
+      },
+      {
+        "round": 5,
+        "phase": "P3",
+        "kind": "suppression_detected",
+        "dimension": "trust",
+        "magnitude": 3.0,
+        "message": "检出压制类行为 3 条 —— 议题可能从「事实争议」转为「动机争议」"
+      },
+      {
+        "round": 6,
+        "phase": "P3",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.0616,
+        "message": "极化加速上升（+0.062）"
+      },
+      {
+        "round": 6,
+        "phase": "P3",
+        "kind": "suppression_detected",
+        "dimension": "trust",
+        "magnitude": 1.0,
+        "message": "检出压制类行为 1 条 —— 议题可能从「事实争议」转为「动机争议」"
+      },
+      {
+        "round": 7,
+        "phase": "P3",
+        "kind": "risk_alert",
+        "dimension": "risk",
+        "magnitude": 0.7205,
+        "message": "风险越过预警线 0.70（当前 0.721）"
+      },
+      {
+        "round": 7,
+        "phase": "P3",
+        "kind": "trust_drop",
+        "dimension": "trust",
+        "magnitude": -0.1182,
+        "message": "信任单日跌幅 0.118，超过阈值 0.06"
+      },
+      {
+        "round": 7,
+        "phase": "P3",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.1581,
+        "message": "极化加速上升（+0.158）"
+      },
+      {
+        "round": 7,
+        "phase": "P3",
+        "kind": "suppression_detected",
+        "dimension": "trust",
+        "magnitude": 6.0,
+        "message": "检出压制类行为 6 条 —— 议题可能从「事实争议」转为「动机争议」"
+      },
+      {
+        "round": 7,
+        "phase": "P3",
+        "kind": "stability_break",
+        "dimension": "stability",
+        "magnitude": 0.5244,
+        "message": "稳定跌破 0.60（当前 0.524）"
+      },
+      {
+        "round": 8,
+        "phase": "P4",
+        "kind": "trust_drop",
+        "dimension": "trust",
+        "magnitude": -0.0603,
+        "message": "信任单日跌幅 0.060，超过阈值 0.06"
+      },
+      {
+        "round": 8,
+        "phase": "P4",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.0806,
+        "message": "极化加速上升（+0.081）"
+      },
+      {
+        "round": 9,
+        "phase": "P4",
+        "kind": "trust_drop",
+        "dimension": "trust",
+        "magnitude": -0.173,
+        "message": "信任单日跌幅 0.173，超过阈值 0.06"
+      },
+      {
+        "round": 9,
+        "phase": "P4",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.1915,
+        "message": "极化加速上升（+0.191）"
+      },
+      {
+        "round": 9,
+        "phase": "P4",
+        "kind": "suppression_detected",
+        "dimension": "trust",
+        "magnitude": 3.0,
+        "message": "检出压制类行为 3 条 —— 议题可能从「事实争议」转为「动机争议」"
+      },
+      {
+        "round": 10,
+        "phase": "P4",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.1085,
+        "message": "极化加速上升（+0.108）"
+      },
+      {
+        "round": 11,
+        "phase": "P4",
+        "kind": "polarization_surge",
+        "dimension": "polarization",
+        "magnitude": 0.069,
+        "message": "极化加速上升（+0.069）"
+      },
+      {
+        "round": 11,
+        "phase": "P4",
         "kind": "suppression_detected",
         "dimension": "trust",
         "magnitude": 1.0,
@@ -1098,110 +1807,110 @@
       {
         "round": 0,
         "phase": "P1",
-        "d_attention": 0.027,
-        "d_polarization": -0.0084,
+        "d_attention": 0.0816,
+        "d_polarization": 0.0009,
         "polarization_exceeds_attention": false
       },
       {
         "round": 1,
         "phase": "P1",
-        "d_attention": 0.0464,
-        "d_polarization": -0.0261,
+        "d_attention": 0.0456,
+        "d_polarization": -0.0008,
         "polarization_exceeds_attention": false
       },
       {
         "round": 2,
         "phase": "P2",
-        "d_attention": 0.0191,
-        "d_polarization": 0.03,
-        "polarization_exceeds_attention": true
+        "d_attention": 0.074,
+        "d_polarization": 0.0619,
+        "polarization_exceeds_attention": false
       },
       {
         "round": 3,
         "phase": "P2",
-        "d_attention": 0.0217,
-        "d_polarization": -0.0179,
-        "polarization_exceeds_attention": false
+        "d_attention": 0.0164,
+        "d_polarization": 0.028,
+        "polarization_exceeds_attention": true
       },
       {
         "round": 4,
         "phase": "P2",
-        "d_attention": -0.0227,
-        "d_polarization": -0.0135,
+        "d_attention": 0.0032,
+        "d_polarization": 0.0217,
         "polarization_exceeds_attention": true
       },
       {
         "round": 5,
         "phase": "P3",
-        "d_attention": 0.0008,
-        "d_polarization": 0.0571,
+        "d_attention": 0.0311,
+        "d_polarization": 0.119,
         "polarization_exceeds_attention": true
       },
       {
         "round": 6,
         "phase": "P3",
-        "d_attention": 0.0223,
-        "d_polarization": -0.0265,
-        "polarization_exceeds_attention": false
+        "d_attention": 0.0061,
+        "d_polarization": 0.0616,
+        "polarization_exceeds_attention": true
       },
       {
         "round": 7,
         "phase": "P3",
-        "d_attention": -0.0038,
-        "d_polarization": -0.0228,
-        "polarization_exceeds_attention": false
+        "d_attention": 0.038,
+        "d_polarization": 0.1581,
+        "polarization_exceeds_attention": true
       },
       {
         "round": 8,
         "phase": "P4",
-        "d_attention": 0.0169,
-        "d_polarization": 0.0128,
-        "polarization_exceeds_attention": false
+        "d_attention": 0.0002,
+        "d_polarization": 0.0806,
+        "polarization_exceeds_attention": true
       },
       {
         "round": 9,
         "phase": "P4",
-        "d_attention": -0.0277,
-        "d_polarization": -0.015,
+        "d_attention": 0.0002,
+        "d_polarization": 0.1915,
         "polarization_exceeds_attention": true
       },
       {
         "round": 10,
         "phase": "P4",
-        "d_attention": -0.037,
-        "d_polarization": -0.0078,
+        "d_attention": 0.0001,
+        "d_polarization": 0.1085,
         "polarization_exceeds_attention": true
       },
       {
         "round": 11,
         "phase": "P4",
-        "d_attention": -0.0233,
-        "d_polarization": -0.0077,
+        "d_attention": -0.01,
+        "d_polarization": 0.069,
         "polarization_exceeds_attention": true
       },
       {
         "round": 12,
         "phase": "P4",
-        "d_attention": -0.0147,
-        "d_polarization": -0.0077,
+        "d_attention": -0.0072,
+        "d_polarization": 0.0,
         "polarization_exceeds_attention": true
       },
       {
         "round": 13,
         "phase": "P4",
-        "d_attention": -0.0014,
-        "d_polarization": -0.0079,
-        "polarization_exceeds_attention": false
+        "d_attention": -0.0344,
+        "d_polarization": 0.0,
+        "polarization_exceeds_attention": true
       },
       {
         "round": 14,
         "phase": "P5",
-        "d_attention": 0.0109,
-        "d_polarization": -0.0164,
-        "polarization_exceeds_attention": false
+        "d_attention": -0.0114,
+        "d_polarization": 0.0,
+        "polarization_exceeds_attention": true
       }
     ],
-    "first_round_polarization_exceeds_attention": 2,
+    "first_round_polarization_exceeds_attention": 3,
     "signal_agrees_with_gold": false,
     "unimplemented_signals": [
       {
@@ -1298,17 +2007,284 @@
     "stability": "既有秩序与共识的维持程度"
   },
   "cost": {
-    "summary": "40 次调用 / 99.7s（均值 2.5s，最慢 10.2s，失败 0） · token 入 417333 / 出 3727",
+    "summary": "400 次调用 / 2280.8s（均值 5.7s，最慢 43.4s，失败 0） · token 入 4377107 / 出 44478",
     "failures_recorded": true,
     "note": "调用失败次数与最慢单次来自产出文件逐轮记录。",
-    "prompt_tokens": 417333,
-    "completion_tokens": 3727
+    "prompt_tokens": 4377107,
+    "completion_tokens": 44478
   },
-  "replay_max_deviation": 4.95344233767403e-05,
+  "evidence": {
+    "rows": [
+      {
+        "round": 0,
+        "phase": "P1",
+        "agents": 27,
+        "n_actions": 26,
+        "n_talk_actions": 21,
+        "n_participants": 26,
+        "n_speakers": 21,
+        "n_behaviors": 21,
+        "volume": 0.9896,
+        "railed": []
+      },
+      {
+        "round": 1,
+        "phase": "P1",
+        "agents": 27,
+        "n_actions": 79,
+        "n_talk_actions": 49,
+        "n_participants": 27,
+        "n_speakers": 26,
+        "n_behaviors": 49,
+        "volume": 1.0,
+        "railed": []
+      },
+      {
+        "round": 2,
+        "phase": "P2",
+        "agents": 27,
+        "n_actions": 51,
+        "n_talk_actions": 23,
+        "n_participants": 27,
+        "n_speakers": 21,
+        "n_behaviors": 23,
+        "volume": 0.9937,
+        "railed": []
+      },
+      {
+        "round": 3,
+        "phase": "P2",
+        "agents": 27,
+        "n_actions": 47,
+        "n_talk_actions": 22,
+        "n_participants": 27,
+        "n_speakers": 20,
+        "n_behaviors": 22,
+        "volume": 0.9919,
+        "railed": []
+      },
+      {
+        "round": 4,
+        "phase": "P2",
+        "agents": 27,
+        "n_actions": 56,
+        "n_talk_actions": 27,
+        "n_participants": 27,
+        "n_speakers": 22,
+        "n_behaviors": 27,
+        "volume": 0.9977,
+        "railed": []
+      },
+      {
+        "round": 5,
+        "phase": "P3",
+        "agents": 27,
+        "n_actions": 57,
+        "n_talk_actions": 27,
+        "n_participants": 27,
+        "n_speakers": 23,
+        "n_behaviors": 27,
+        "volume": 0.9977,
+        "railed": []
+      },
+      {
+        "round": 6,
+        "phase": "P3",
+        "agents": 27,
+        "n_actions": 59,
+        "n_talk_actions": 22,
+        "n_participants": 27,
+        "n_speakers": 17,
+        "n_behaviors": 22,
+        "volume": 0.9919,
+        "railed": []
+      },
+      {
+        "round": 7,
+        "phase": "P3",
+        "agents": 27,
+        "n_actions": 55,
+        "n_talk_actions": 21,
+        "n_participants": 27,
+        "n_speakers": 18,
+        "n_behaviors": 21,
+        "volume": 0.9896,
+        "railed": []
+      },
+      {
+        "round": 8,
+        "phase": "P4",
+        "agents": 27,
+        "n_actions": 49,
+        "n_talk_actions": 17,
+        "n_participants": 27,
+        "n_speakers": 17,
+        "n_behaviors": 17,
+        "volume": 0.9719,
+        "railed": []
+      },
+      {
+        "round": 9,
+        "phase": "P4",
+        "agents": 27,
+        "n_actions": 52,
+        "n_talk_actions": 13,
+        "n_participants": 27,
+        "n_speakers": 12,
+        "n_behaviors": 13,
+        "volume": 0.9253,
+        "railed": [
+          "risk"
+        ]
+      },
+      {
+        "round": 10,
+        "phase": "P4",
+        "agents": 27,
+        "n_actions": 50,
+        "n_talk_actions": 13,
+        "n_participants": 27,
+        "n_speakers": 11,
+        "n_behaviors": 13,
+        "volume": 0.9253,
+        "railed": [
+          "trust",
+          "risk"
+        ]
+      },
+      {
+        "round": 11,
+        "phase": "P4",
+        "agents": 27,
+        "n_actions": 51,
+        "n_talk_actions": 12,
+        "n_participants": 27,
+        "n_speakers": 11,
+        "n_behaviors": 12,
+        "volume": 0.9051,
+        "railed": [
+          "trust",
+          "polarization",
+          "risk",
+          "stability"
+        ]
+      },
+      {
+        "round": 12,
+        "phase": "P4",
+        "agents": 27,
+        "n_actions": 48,
+        "n_talk_actions": 10,
+        "n_participants": 27,
+        "n_speakers": 9,
+        "n_behaviors": 10,
+        "volume": 0.8483,
+        "railed": [
+          "trust",
+          "polarization",
+          "risk",
+          "stability"
+        ]
+      },
+      {
+        "round": 13,
+        "phase": "P4",
+        "agents": 27,
+        "n_actions": 49,
+        "n_talk_actions": 8,
+        "n_participants": 27,
+        "n_speakers": 8,
+        "n_behaviors": 8,
+        "volume": 0.7616,
+        "railed": [
+          "trust",
+          "polarization",
+          "risk",
+          "stability"
+        ]
+      },
+      {
+        "round": 14,
+        "phase": "P5",
+        "agents": 27,
+        "n_actions": 45,
+        "n_talk_actions": 9,
+        "n_participants": 27,
+        "n_speakers": 8,
+        "n_behaviors": 9,
+        "volume": 0.8093,
+        "railed": [
+          "trust",
+          "polarization",
+          "risk",
+          "stability"
+        ]
+      }
+    ],
+    "presence": {
+      "agents": 27,
+      "first_round": 0,
+      "last_round": 14,
+      "speakers_first": 21,
+      "speakers_last": 8,
+      "participants_first": 26,
+      "participants_last": 27,
+      "participants_min": 26,
+      "participants_max": 27,
+      "participants_constant": false,
+      "speakers_fell": true,
+      "speech_dropped_faster": true
+    },
+    "railed_rounds": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "railed_dims": [
+      "polarization",
+      "risk",
+      "stability",
+      "trust"
+    ],
+    "window_rounds": [
+      0,
+      2,
+      5,
+      8,
+      14
+    ],
+    "no_evidence_rounds": [],
+    "leanest": {
+      "round": 14,
+      "phase": "P5",
+      "agents": 27,
+      "n_actions": 45,
+      "n_talk_actions": 9,
+      "n_participants": 27,
+      "n_speakers": 8,
+      "n_behaviors": 9,
+      "volume": 0.8093,
+      "railed": [
+        "trust",
+        "polarization",
+        "risk",
+        "stability"
+      ]
+    },
+    "min_n_behaviors": 9
+  },
+  "replay_max_deviation": 4.924954769952583e-05,
   "degradations": [
     {
-      "kind": "small_scale",
-      "text": "仅 3 个 agent —— 每轮只有 3~4 条行为，声势项 `tanh(n/8)` 只到半饱和，所有数值都是小规模敏感性测试"
+      "kind": "truncated",
+      "text": "全程 767 次记忆截断，单次最多丢弃 1234443 token —— 最坏的那一轮里，agent 能看到的记忆**不超过自己的 1.31%**（丢弃量是窗口上限的 75 倍），而且 camel 是**按打分**丢低分的—— 留下的不保证是最近的那一段。被截断轮次的 agent 在丢失历史的状态下说话，数字要打折"
+    },
+    {
+      "kind": "railed",
+      "text": "R9、R10、R11、R12、R13、R14 有维度**恰好贴到上下界**（极化、风险、稳定、信任）—— `_clamp(·, 0, 1)` 的边界产物，不是读数；这些轮次的曲线形状由夹逼决定，不由行为决定"
     }
   ],
   "disclaimers": {
@@ -1323,6 +2299,8 @@
     "compressed": "[压缩模式·与轮=天不可比]",
     "model_internal": "[模型内对照·非预测]",
     "assumption": "[干预口径为本文自设假设]",
-    "degraded": "[降级项]"
+    "degraded": "[降级项]",
+    "context": "[上下文压力·已监测]",
+    "evidence": "[证据量·逐轮]"
   }
 }

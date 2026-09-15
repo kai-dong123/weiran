@@ -367,6 +367,145 @@ def test_counterfactual_disclosure_raises_trust():
     )
 
 
+# -- 耦合在贴壁处的行为（D4）-------------------------------------------------
+#
+# 背景：`dev = relaxed[src] - baseline[src]` 是**无界**的，于是一个贴到自己那侧
+# 边界的维度会成为永久且量级最大的耦合源 —— 信任贴到 0 时 `dev = -0.70`，
+# 每轮往外灌 `0.35 * 0.70 = 0.245` 的「影响」。而耦合图上
+# `trust→panic→risk→polarization→trust` 是正反馈环（环积 +0.0003 > 0），
+# 所以一维的墙会传染成四维的墙。末步那个硬夹只是让这个不动点无法逃逸。
+#
+# 这一组测的是**机制的性质**，不是任何数值拟合：
+# 「贴壁的维度不该是永久的耦合源」与「贴壁的维度必须能下来」。
+#
+# ⚠️ 实测口径（写在这里免得被误读）：开启这一项**修不了形状**。
+# 真实 27 agent 行为流的离线重放显示，开与不开两种状态下
+# AS-2/AS-4/AS-5 都不过 —— 形状由行为流的相位决定（见 `进度.md`）。
+# 它修的是「模型能不能恢复」，那是另一件事，也必须有。
+
+
+def _locked_state() -> WorldState:
+    """构造那个被传染出来的锁死态：信任贴下壁 + 极化贴上壁。"""
+    s = WorldState.baseline()
+    s.values["trust"] = 0.0
+    s.values["polarization"] = 1.0
+    return s
+
+
+def test_couple_saturate_defaults_off():
+    """**默认必须是关的。**
+
+    这不是保守，是同一性：仓库里那份 27 agent 产出、`README` 与
+    `进度.md` 里所有已公布的数字，都是在旧行为下算出来的。
+    默认一翻，那些数字就全部失据。所以先留成可实测的对照，
+    由用户决定何时翻默认并重跑（`--events-from` 那次是同一个做法）。
+    """
+    assert WorldStateEngine().couple_saturate is False
+
+
+def test_couple_saturate_actually_changes_the_trajectory():
+    """**一个不改变任何东西的开关就是恒真检查。**
+
+    本项目已经栽过一次「只断言参数在场」的坑，所以这条正面验证：
+    同一个状态、同一份行为，开与不开必须给出不同的轨迹。
+    """
+    seq = [["suppression"] * 4, ["testimony"] * 3, ["discussion"] * 5]
+    off = WorldStateEngine()
+    on = WorldStateEngine(couple_saturate=True)
+    a, b = _baseline(), _baseline()
+    for bs in seq:
+        a = off.step(a, bs, dt=1.0, phase_id="X").state_after
+        b = on.step(b, bs, dt=1.0, phase_id="X").state_after
+    assert a.as_dict() != b.as_dict(), "开了耦合饱和却算出一模一样的轨迹"
+
+
+def test_a_railed_dimension_stops_sourcing_coupling():
+    """★ 核心机制。系数是**弛豫后的余量**，所以贴壁处「趋于 0」而非「恰好 0」。
+
+    这个区别值得写清楚，因为第一版断言写的就是「恰好 0.0」而它红了，
+    红得对：耦合按 `relaxed` 算，而贴壁的维度在**弛豫那一步已经离壁**了
+    （信任 0.0 在 dt=1 下先回到 0.0338）。于是「朝下推还剩多少余量」
+    是 0.0338 而不是 0 —— 系数本身没有错，是断言错了。
+
+    所以这里钉的是**公式**而不是一个好看的数字，构造成完全受控：
+    只有 `polarization→trust` 这一条边指向信任。同时给出对比量，
+    说明关闭时这一项确实是个大负数。
+    """
+    st = _locked_state()
+    e = WorldStateEngine(couple_saturate=True)
+    r = e.step(st, [], dt=1.0, phase_id="X")
+
+    relaxed = {d: r.state_before[d] + r.excitation[d] + r.relaxation[d]
+               for d in DIMENSIONS}
+    bl = e.params["polarization"].baseline
+    # 唯一的入边：polarization→trust 的权重是 −0.10，系数取 trust 弛豫后的余量。
+    expected = -0.10 * (relaxed["polarization"] - bl) * relaxed["trust"]
+    assert abs(r.coupling["trust"] - expected) < 1e-12, (
+        f"耦合不是「按弛豫后余量缩放」的形状：实得 {r.coupling['trust']:.6f}，"
+        f"应为 {expected:.6f}"
+    )
+    assert r.coupling["trust"] > -0.005, (
+        f"信任已在下壁，耦合却仍灌了 {r.coupling['trust']:.4f}"
+    )
+    assert r.coupling["stability"] < 0.0, (
+        "稳定没在壁上，来自极化的耦合不该被削掉"
+    )
+
+    raw = WorldStateEngine().step(st, [], dt=1.0, phase_id="X")
+    assert raw.coupling["trust"] < -0.05, (
+        f"关闭时该看到一个大负数，实得 {raw.coupling['trust']:.4f}"
+    )
+
+
+def test_a_railed_dimension_can_come_back():
+    """★ 核心机制。「一个下不来的模型是坏的。」
+
+    信任贴在下壁、极化贴在上壁，然后给一份**明确有利**的行为流。
+    关闭耦合饱和时信任几乎出不来（被极化的耦合摁住）；
+    开启后它能离开墙壁。断言用「恢复量」这个模型自身的性质，
+    不用任何金标数字。
+    """
+    fav = ["disclosure"] * 8
+    got = {}
+    for flag in (False, True):
+        e = WorldStateEngine(couple_saturate=flag)
+        st = _locked_state()
+        for _ in range(3):
+            st = e.step(st, fav, dt=1.0, phase_id="P5").state_after
+        got[flag] = st["trust"]
+    assert got[True] > got[False], (
+        f"开启后信任该恢复得更快：开={got[True]:.4f} 关={got[False]:.4f}"
+    )
+    assert got[True] > 0.05, f"开启后三轮仍几乎出不来：{got[True]:.4f}"
+
+
+def test_saturation_never_strengthens_a_push():
+    """饱和只能是「削」，不能是「加」—— 否则它就成了另一个自由参数。"""
+    e_off = WorldStateEngine()
+    e_on = WorldStateEngine(couple_saturate=True)
+    seq = [["suppression"] * 6, ["amplification"] * 4, ["disclosure"] * 3, []]
+    a, b = _baseline(), _baseline()
+    for bs in seq:
+        ra = e_off.step(a, bs, dt=2.0, phase_id="X")
+        rb = e_on.step(b, bs, dt=2.0, phase_id="X")
+        for d in DIMENSIONS:
+            assert abs(rb.coupling[d]) <= abs(ra.coupling[d]) + 1e-12, (
+                f"{d} 的耦合被饱和放大了：{ra.coupling[d]:.5f} → {rb.coupling[d]:.5f}"
+            )
+        a, b = ra.state_after, rb.state_after
+
+
+def test_values_stay_bounded_with_saturation_on():
+    """开启后同样必须留在 [0, 1] —— 极端输入也不许越界。"""
+    e = WorldStateEngine(couple_saturate=True)
+    cur = _baseline()
+    for behaviors in (["suppression"] * 200, ["amplification"] * 200,
+                      ["disclosure"] * 200, ["testimony"] * 200, []):
+        cur = e.step(cur, behaviors, dt=30.0, phase_id="X").state_after
+        for d in DIMENSIONS:
+            assert 0.0 <= cur[d] <= 1.0, f"{d} 越界：{cur[d]}"
+
+
 # -- 简易 runner -----------------------------------------------------------
 
 
