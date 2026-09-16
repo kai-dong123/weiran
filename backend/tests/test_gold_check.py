@@ -13,10 +13,15 @@
      成立；一条恒真的判据比没有判据更危险，因为它会通过。
   5. **出处被代写。** 表头那句「这不是分数」是金标自己说的，本表只是引用；
      金标没写就必须抛，不能替它说 —— 替它说就是替它背书。
+  6. **人写的解读变成恒真判据。** 摘要里那句「四条否决同源」是一句人写的判断，
+     而它读的 `counts` 是算出来的。两者一旦脱钩，这句话就会在前提已经消失之后
+     继续宣称同一件事 —— 病与第 4 条同一个，只是发生在字符串里，贴界与恒真
+     那两道闸都拦不住。所以解读**必须带着前提一起输出**，前提由本次结果去核。
 
 第 4 条有一个**防恒真用例**：把 P5 那一轮改成不贴界（真数据上手工改，
 不是另造一份合成输入），AS-5 必须从「通过」变成「否决」。做不到这一点，
 就说明「不采信」那套逻辑是装饰 —— 一个永远返回「不采信」的实现也能过。
+第 6 条同理，也有一个反向用例：把一个 verdict 拨成通过，那句解读必须闭嘴。
 
 与另几套一样，**刻意不依赖 pytest**：普通 assert + 函数。
 数据一律取**入库的真产出**（27 agent × 15 轮）与**真金标**，不另造合成输入：
@@ -184,13 +189,60 @@ def test_as7_records_that_the_check_text_itself_is_wrong():
         f"没记下判据原文与声称不等价：{r['to_make_decidable']}"
 
 
-def test_summary_names_the_shared_root_cause():
-    """三条否决是**同一个相位缺陷**，表里必须写明，别让人读成三个问题。"""
+def test_interpretations_carry_their_premise_and_are_machine_checked():
+    """人写的那句解读，**前提要和话一起输出，而且前提由本次结果去核**。
+
+    这条测试以前是「字符串里提到了 AS-2/3/4/8 就行」—— 那是一条**复述实现**
+    的测试：把那句话写死成一个常量，它照样绿。而写死正是这里出过的事故：
+    `counts` 是算出来的，那句话是写死的，两者可以对不上。具体会怎么坏：
+    相位缺陷一旦修好、AS-3 翻成通过，那句话会**继续宣称 AS-3 否决**。
+    那是摘要层的恒真判据 —— 与本表要防的病同一个，只是发生在一个字符串里，
+    贴界与恒真那两道闸都拦不住它。
+
+    所以这里验两件事，**第二件才是重点**：
+      ① 前提成立时，那句话确实输出，且四条都在里面；
+      ② 前提不成立时，它必须**闭嘴并说明为什么**。
+    少了 ②，一个「永远输出同一句话」的实现照样全绿。
+    """
     doc = _full()
-    note = doc["summary"]["one_defect_note"]
+    it = next(i for i in doc["summary"]["interpretations"]
+              if i["id"] == "shared_root_cause")
+    assert it["applies"] is True, it
     for aid in ("AS-2", "AS-3", "AS-4", "AS-8"):
-        assert aid in note, f"{aid} 没被归到那条共同的成因里"
-    assert "相位" in note, "没点出是相位缺陷"
+        assert aid in it["claim"], f"{aid} 没被归到那条共同的成因里"
+    assert "相位" in it["claim"], "没点出是相位缺陷"
+    assert it["observed"] == {"AS-2": "否决", "AS-3": "否决",
+                              "AS-4": "否决", "AS-8": "否决"}, it["observed"]
+
+    # ② 真结果上单点改一个 verdict（AS-3 拨成通过，另三条仍是否决）。
+    #    前提于是不成立 —— 那句话**不许再输出**。
+    rows = copy.deepcopy(doc["assertions"])
+    _by_id({"assertions": rows}, "AS-3")["verdict"] = G.PASS_
+    it = next(i for i in G.summarize(rows)["interpretations"]
+              if i["id"] == "shared_root_cause")
+    assert it["applies"] is False, "前提不成立却仍然判它成立"
+    assert it["claim"] is None, \
+        "前提不成立却仍然给出了那句判断 —— 这就是摘要层的恒真判据"
+    assert "AS-3" in it["not_applicable_because"], it["not_applicable_because"]
+    assert "通过" in it["not_applicable_because"], it["not_applicable_because"]
+    for aid in ("AS-2", "AS-4", "AS-8"):
+        assert aid not in it["not_applicable_because"], \
+            f"{aid} 仍然是否决，不该被列进「前提为何不成立」里"
+
+
+def test_as10_is_called_out_as_a_separate_matter():
+    """AS-10 是另一件事，不许被并进那条相位成因里 —— 前提同样机检。"""
+    doc = _full()
+    it = next(i for i in doc["summary"]["interpretations"]
+              if i["id"] == "as10_is_another_matter")
+    assert it["applies"] is True, it
+    assert it["observed"] == {"AS-10": "否决"}, it["observed"]
+
+    rows = copy.deepcopy(doc["assertions"])
+    _by_id({"assertions": rows}, "AS-10")["verdict"] = G.PASS_
+    it = next(i for i in G.summarize(rows)["interpretations"]
+              if i["id"] == "as10_is_another_matter")
+    assert it["applies"] is False and it["claim"] is None, it
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +327,21 @@ def test_railed_variant_is_reported_for_ordering_assertions():
 # ---------------------------------------------------------------------------
 # 4. 恒真判据：AS-5 的防恒真用例
 # ---------------------------------------------------------------------------
+
+def test_no_variant_is_invented_when_there_is_nothing_to_strip():
+    """AS-2 读的是 attention，而 attention **从未触界** —— 它不该有剔掉变体。
+
+    这里曾经有过一个，是真事故：变体原先按「轮集合 × 维集合」的**乘积**算，
+    R14 因为在 trust/risk/stability 上贴界而进了贴界轮集合，于是 `attention@R14`
+    被一并剔掉，凭空造出一个「剔掉后 argmax 变成 P4」的假变体。
+    **一个空的「剔掉后还是老样子」比没有更坏 —— 它看起来像做过检验。**
+    """
+    doc, _ = _table()
+    r = _by_id(doc, "AS-2")
+    assert r["variant"] is None, \
+        f"attention 从未触界，不该给出剔掉变体：{r['variant']}"
+    assert r["tainted_by_railing"] == [], r["tainted_by_railing"]
+
 
 def test_as5_is_flagged_vacuous_when_trust_falls():
     """信任下降时 AS-5 的右端为负 → 判据恒真 → **通过也不能采信**。"""

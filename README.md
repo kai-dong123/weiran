@@ -16,7 +16,7 @@
 > 该 agent 该轮动作整条丢；修法是让 shim 成为该 agent 时间戳的唯一权威）**；
 > **已把「哪些层是随机的」做成可机检的声明，并把多 seed 批次工具与离线汇总器
 > 备好（零成本的一半已落地，批次待跑）**；
-> 413 条测试全绿，五层可复现性自检通过）
+> 423 条测试全绿，六层可复现性自检通过）
 
 > **要把它跑起来，看 [`docs/使用手册.md`](docs/使用手册.md)。**
 > 那份手册负责「怎么跑、产出在哪、每个字段怎么读、哪些数不能按字面读」；
@@ -83,16 +83,17 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 413 条，一次跑完（推荐）
+python -m pytest tests/             # 423 条，一次跑完（推荐）
 
-# 十五套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
+# 十六套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
 python tests/test_world_state.py    # 23/23
 python tests/test_llm.py            # 33/33
 python tests/test_stance.py         # 26/26
 python tests/test_perception.py     # 49/49
 python tests/test_brief.py          # 55/55
-python tests/test_gold_check.py     # 27/27
+python tests/test_gold_check.py     # 29/29
+python tests/test_selfcheck.py      # 8/8
 python tests/test_simulate.py       # 36/36
 python tests/test_config.py         # 12/12
 python tests/test_repro_check.py    # 13/13
@@ -254,7 +255,7 @@ backend/
     gold_check.py   金标对照表：金标自己写的 10 条断言逐条核（不依赖 LLM）
     stability.py    随机性来源表（五层）与进程级播种：声明哪些层能收窄、哪些不能
     viewer.py       只读展示层：把已有产物渲成页面（可选依赖 flask，不触发 LLM）
-  repro_check.py    可复现性分级自检（五层各测一遍；产物写临时运行目录）
+  repro_check.py    可复现性分级自检（六层各测一遍；产物写临时运行目录）
   run_seeds.py      多 seed 批次驱动：按 seed 起 N 支臂，输入同源与协议一致由程序强制
                     （默认只打印估算与拒绝理由；不给 --yes 不发请求）
   stability_report.py  批次离线汇总：逐轮逐维跨臂均值/范围 + 逐臂金标三态（不依赖 LLM）
@@ -265,7 +266,8 @@ backend/
     test_stance.py       26 条
     test_perception.py   49 条
     test_brief.py        55 条
-    test_gold_check.py   27 条
+    test_gold_check.py   29 条
+    test_selfcheck.py     8 条
     test_simulate.py     36 条
     test_config.py       12 条
     test_repro_check.py  13 条
@@ -274,7 +276,7 @@ backend/
     test_stability_report.py  31 条
     test_run_seeds.py    34 条
     test_handbook.py     28 条
-    —— 共 413 条，`python -m pytest tests/` 一次跑完
+    —— 共 423 条，`python -m pytest tests/` 一次跑完
 data/
   simulation/                      推演产出（入库：是「跑得通」的证据）
     twitter_rounds.json            27 agent × 15 轮：逐轮状态、行为、成本、

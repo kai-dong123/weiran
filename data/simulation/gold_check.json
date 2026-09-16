@@ -70,6 +70,27 @@
     "note_1based": "**别与 1 基的 R 号混用。** 2026-09-14 那批表是 0 基（R0~R14），后来的日志用 1 基（R1~R15）。本表全部 0 基，如需对照 1 基加 1。"
   },
   "railing": {
+    "railed_cells": [
+      "polarization@R11",
+      "polarization@R12",
+      "polarization@R13",
+      "polarization@R14",
+      "risk@R10",
+      "risk@R11",
+      "risk@R12",
+      "risk@R13",
+      "risk@R14",
+      "risk@R9",
+      "stability@R11",
+      "stability@R12",
+      "stability@R13",
+      "stability@R14",
+      "trust@R10",
+      "trust@R11",
+      "trust@R12",
+      "trust@R13",
+      "trust@R14"
+    ],
     "railed_rounds": [
       9,
       10,
@@ -84,7 +105,7 @@
       "stability",
       "trust"
     ],
-    "rule": "一个值恰好等于 0.0000 或 1.0000 即为贴界（`_clamp(·, 0, 1)` 的夹逼产物）。**判据读过的那几个 (维, 轮) 里只要有一个踩在贴界上，该条即「不采信」** —— 不是「结果作废」，是「这个结果不能当证据」。"
+    "rule": "一个值恰好等于 0.0000 或 1.0000 即为贴界（`_clamp(·, 0, 1)` 的夹逼产物）。**判据读过的那个 (维, 轮) 单元格只要本身踩在贴界上，该条即「不采信」** —— 不是「结果作废」，是「这个结果不能当证据」。**按单元格判，不按「沾没沾到贴界轮」判，也不按「轮集合 × 维集合」的乘积判** —— 后两者会把干净的操作数判成贴界，把整张表染红。`railed_rounds` / `railed_dims` 是两张给人看的汇总清单，**不参与判定**；判定只看 `railed_cells`。"
   },
   "assertions": [
     {
@@ -122,22 +143,12 @@
           "value": 0.3467
         }
       },
-      "detail": "argmax = P4（0.3465）；P3 是 0.3021。 剔掉贴界轮后 argmax = P4（0.3465）",
+      "detail": "argmax = P4（0.3465）；P3 是 0.3021。",
       "tainted_by_railing": [],
       "undecidable_because": null,
       "to_make_decidable": null,
       "argmax_rule": "`argmax_phase` 有两个口径：只在 5 个**阶段轮**上取，或在全部 15 轮上取。本表按「阶段轮」取，因为金标写的是阶段（P3），而阶段只在被注入的那一轮上有落点；另一个口径的读数同时印出来供核对。",
-      "variant": {
-        "scope": "剔掉贴界轮的阶段轮",
-        "argmax_phase": "P4",
-        "value": 0.3465,
-        "rounds_used": [
-          0,
-          2,
-          5,
-          8
-        ]
-      }
+      "variant": null
     },
     {
       "id": "AS-3",
@@ -188,7 +199,7 @@
       "to_make_decidable": null,
       "argmax_rule": "`argmax_phase` 有两个口径：只在 5 个**阶段轮**上取，或在全部 15 轮上取。本表按「阶段轮」取，因为金标写的是阶段（P3），而阶段只在被注入的那一轮上有落点；另一个口径的读数同时印出来供核对。",
       "variant": {
-        "scope": "剔掉贴界轮的阶段轮",
+        "scope": "剔掉 `polarization` 自己贴界的阶段轮",
         "argmax_phase": "P4",
         "value": 0.631,
         "rounds_used": [
@@ -368,7 +379,31 @@
         "because": "贴界"
       }
     ],
-    "one_defect_note": "**AS-2 / AS-3 / AS-4 / AS-8 四条否决指向同一条相位缺陷** —— 模型的状态峰值落在 P3 之后一到两轮（见 进度.md 的相位定案）。不要读成四个独立问题：它们是同一个成因的四个落点。AS-10 是另一件事（贴界 + 离线分支不是真反事实）。"
+    "interpretations": [
+      {
+        "id": "shared_root_cause",
+        "claim": "**AS-2 / AS-3 / AS-4 / AS-8 四条否决指向同一条相位缺陷** —— 模型的状态峰值落在 P3 之后一到两轮（见 进度.md 的相位定案）。不要读成四个独立问题：它们是同一个成因的四个落点。",
+        "requires": "这四条在本次运行里都是「否决」",
+        "observed": {
+          "AS-2": "否决",
+          "AS-3": "否决",
+          "AS-4": "否决",
+          "AS-8": "否决"
+        },
+        "applies": true,
+        "not_applicable_because": null
+      },
+      {
+        "id": "as10_is_another_matter",
+        "claim": "AS-10 是另一件事（贴界 + 离线分支不是真反事实）。",
+        "requires": "AS-10 在本次运行里是「否决」",
+        "observed": {
+          "AS-10": "否决"
+        },
+        "applies": true,
+        "not_applicable_because": null
+      }
+    ]
   },
   "_provenance": {
     "rounds_file": "D:\\open_source\\weiran\\data\\simulation\\twitter_rounds.json",

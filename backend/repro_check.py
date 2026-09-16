@@ -7,6 +7,7 @@
     「未然」的可复现性是**分层**的，不是一句「我们可复现」能概括的。
 
     第 3 层  端到端（同一条命令 → 同一条曲线）   ❌ 不可复现，且**原理上做不到**
+    第 2.7 层 自证（反例喂进去，结论跟着动吗）   ✅ 确定，`weiran.selfcheck` 本体
     第 2.6 层 金标对照（同一份产出 → 同一张表）  ✅ 确定，`test_gold_check.py` 锁住
     第 2.5 层 简报（同一份产出 → 同一份文字）    ✅ 确定，`test_brief.py` 锁住
     第 2 层  推演（同样的行为序列 → 同样的曲线） ✅ 确定，`test_world_state.py` 锁住
@@ -55,10 +56,17 @@
 第 2.6 层同理由，多一条：**金标对照表的结论必须能被评委自己跑出来**。
 那张表里有三条否决，正是靠这一层才成为可核对的结论而不是一句表态。
 
+第 2.7 层（`weiran.selfcheck`）问的是这些层都问不到的一件事：**上面每一层都是
+「同一份产出 → 同一份产物」，那么一个把结论写死的实现，能让它们全部通过。**
+把 `evaluate()` 整个换成一张十行的常量表，2.6 层照旧逐字一致、照旧全绿。
+**「可复现」与「算出来的」是两个问题**，2.5/2.6 只回答了前一个。
+所以这一层喂反例：改一处读数，看结论会不会跟着动、以及**不该动的有没有跟着动**。
+它同样进退出码 —— 它是确定的（不调 LLM、无随机数），没有理由不进。
+
 用法：
     cd backend
-    python repro_check.py            # 五层都跑
-    python repro_check.py --skip-e2e # 只跑确定的四层（快、不花钱）
+    python repro_check.py            # 六层都跑
+    python repro_check.py --skip-e2e # 只跑确定的五层（快、不花钱，不跑第 3 层）
 """
 
 from __future__ import annotations
@@ -381,6 +389,57 @@ def check_gold_check() -> bool | None:
 
 
 # ---------------------------------------------------------------------------
+# 第 2.7 层：自证 —— 反例喂进去，结论跟着动吗
+# ---------------------------------------------------------------------------
+
+def check_selfcheck() -> bool | None:
+    """第 2.7 层：装置自证 —— 那张表是不是**算出来的**。
+
+    这一层跟 2.6 的区别不是精度，是**问法**：2.6 问「同一份产出是不是给同一张
+    表」，这一层问「那张表有没有可能本来就是写死的」。**一个把结论写死的实现
+    能让 2.5 与 2.6 全部逐字通过** —— 它们比的是「两次跑一样」，而常量表当然
+    每次都一样。把 `evaluate()` 换成十行 `if/else`，2.6 及以前那几层一个都不会红。
+
+    所以这一层不比两次运行，它**喂反例**：一次改一处读数，看结论会不会跟着动；
+    同时看**声明不该动的那几条有没有跟着动**。它进退出码：不调 LLM、无随机数，
+    是确定的 —— 没有理由不进。
+
+    这里只跑判定，不重抄自证的逻辑：连「五个格都要被触发过」这句话都是
+    `weiran.selfcheck` 自己算出来的，它自己说不全，这里就红。
+    """
+    print("\n【第 2.7 层】自证：反例喂进去，结论跟着动吗")
+    from weiran import selfcheck as S
+    from weiran.config import REPO_ROOT
+
+    run_path = REPO_ROOT / "data" / "simulation" / "twitter_rounds.json"
+    if not run_path.is_file():
+        print(f"  ⏭  缺少 {run_path.name} —— **这不是「通过」，是没测到**。")
+        return None
+
+    rep = S.run()
+    n, n_bad = len(rep["results"]), len(rep["failures"])
+    for r in rep["results"]:
+        if not r["ok"]:
+            print(f"  ❌ #{r['n']} {r['what']}")
+            for c in r["checks"]:
+                print(f"       - {c}")
+    ok = not rep["failures"] and not rep["missing_grids"]
+
+    print(f"  {'✅' if not rep['failures'] else '❌'} "
+          f"{n - n_bad}/{n} 个反例落在预期格")
+    hit = set(rep["grids"])
+    print(f"  {'✅' if not rep['missing_grids'] else '❌'} "
+          f"五个输出格被触发 {len(hit)}/5"
+          + ("" if not rep["missing_grids"] else "，缺 "
+             + "、".join(S._grid_name(v, t) for v, t in rep["missing_grids"])))
+    print(f"  {'✅' if rep['entry_ok'] else '❌'} "
+          f"自证用的链路与产品入口 `build_gold_check` 等价")
+    print(f"  → 这张表的结论由输入决定：{'是 ✅' if ok else '否 ❌'}"
+          "（这一层不比两次运行 —— 常量表每次运行也一样。）")
+    return ok
+
+
+# ---------------------------------------------------------------------------
 # 第 3 层：端到端 —— 同一条命令，同一条曲线
 # ---------------------------------------------------------------------------
 
@@ -466,7 +525,8 @@ def main() -> int:
     args = ap.parse_args()
 
     results = {"归类": check_classifier(), "引擎": check_engine(),
-               "简报": check_brief(), "对照表": check_gold_check()}
+               "简报": check_brief(), "对照表": check_gold_check(),
+               "自证": check_selfcheck()}
     if not args.skip_e2e:
         # **第 3 层的产物写进临时目录。** 它跑的是完整的 LLM 推演，
         # 若沿用默认输出路径，跑一次自检就会覆盖 `data/simulation/` 里
@@ -484,7 +544,7 @@ def main() -> int:
     # 把它算进去会让这个脚本天天红，然后就没人看了。前两层与简报/对照表层进。
     # 「未测到」(None) **算失败**：产出文件随仓库入库，缺了就是仓库不完整，
     # 而一个「跑不动所以全绿」的自检脚本正好是它要防的那种东西。
-    gated = [results[k] for k in ("归类", "引擎", "简报", "对照表")]
+    gated = [results[k] for k in ("归类", "引擎", "简报", "对照表", "自证")]
     if any(v is None for v in gated):
         print("  ⚠️ 有检查未测到（见上）—— 未测到按失败计，不按通过计")
     return 0 if all(v is True for v in gated) else 1

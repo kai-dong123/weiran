@@ -392,12 +392,22 @@ def test_the_four_assertions_blamed_on_one_defect_are_the_real_ones():
     """
     gold = json.loads((REPO_ROOT / "data" / "simulation" / "gold_check.json")
                       .read_text(encoding="utf-8"))
+    # 那一句现在住在一处**带前提的解读**里，而不是一个写死的字符串字段。
+    # 这不是位置搬家：写死的字符串与它读的 `counts` 可以对不上（相位缺陷一旦
+    # 修好、AS-3 翻成通过，那句话会继续宣称 AS-3 否决）。所以这里先确认它的
+    # **前提在本次运行里成立** —— 前提不成立时 `claim` 是 `None`，手册就不该
+    # 再宣称这条；那时该改的是手册，不是把抽取放宽。
+    its = {i["id"]: i for i in gold["summary"].get("interpretations", [])}
+    it = its.get("shared_root_cause")
+    assert it, "入库表里没有「四条否决同源」那条解读 —— 抽取逻辑失效了"
+    assert it["applies"] and it["claim"], (
+        "这条解读在本次运行里前提不成立（claim 为 None），"
+        "手册却还在宣称它 —— 得先改手册")
     # 表里那一句点名的正是「四条否决」。**不能拿整句里的全部 AS-N 去比** ——
     # 那一句后半还提了 AS-10，但说的是「它是另一件事」，不在四条之列。
     # 天真的全文抽取会把 AS-10 收进来，然后逼着手册也把它列进那四条里。
-    note = gold["summary"].get("one_defect_note", "")
-    m0 = re.search(r"(AS-[\d\s/,AS-]+?)四条否决", note)
-    assert m0, "入库表的 one_defect_note 里没点名哪几条否决同源 —— 抽取逻辑失效了"
+    m0 = re.search(r"(AS-[\d\s/,AS-]+?)四条否决", it["claim"])
+    assert m0, "那条解读里没点名哪几条否决同源 —— 抽取逻辑失效了"
     real = set(re.findall(r"AS-\d+", m0.group(1)))
 
     m = re.search(r"其中 \*\*([^*]+?)四条否决", _text())
@@ -662,6 +672,7 @@ _SUITE_OF_MODULE = {
     "brief.py": "test_brief",
     "stability.py": "test_stability",
     "repro_check.py": "test_repro_check",
+    "selfcheck.py": "test_selfcheck",
     "run_seeds.py": "test_run_seeds",
     "stability_report.py": "test_stability_report",
 }

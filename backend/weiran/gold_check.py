@@ -71,6 +71,36 @@ UNDECIDED = "不可判定"
 NO_TRUST_RAIL = "贴界"
 NO_TRUST_VACUOUS = "判据恒真"
 
+#: 人对数据的解读。**每一条都必须带着自己的前提一起落盘，而且前提要机检。**
+#:
+#: 这一段原先是一个写死的字符串，而 `counts` 是算出来的 —— 两者可以对不上。
+#: 具体会怎么坏：一旦相位缺陷被修好、AS-3 翻成通过，那句「AS-2/AS-3/AS-4/AS-8
+#: 四条否决指向同一条相位缺陷」会**继续宣称 AS-3 否决**。那就是摘要层的恒真
+#: 判据，与本表要防的病是同一个 —— 只不过它发生在人写的那句话里，不在求值
+#: 函数里，所以贴界与恒真那两道闸都拦不住它。
+#:
+#: 修法不是把这句话删掉（它是有价值的判断），是**给它装上前提**：前提成立才
+#: 输出，不成立就明说「本次运行不满足这条解读的前提，所以没有输出」。前提本身
+#: 由 `_interpretations` 拿本次的实际 verdict 去核 —— 于是这句话不可能撒谎。
+INTERPRETATIONS = (
+    {
+        "id": "shared_root_cause",
+        "claim": (
+            "**AS-2 / AS-3 / AS-4 / AS-8 四条否决指向同一条相位缺陷** —— "
+            "模型的状态峰值落在 P3 之后一到两轮（见 进度.md 的相位定案）。"
+            "不要读成四个独立问题：它们是同一个成因的四个落点。"
+        ),
+        "requires_ids_failed": ("AS-2", "AS-3", "AS-4", "AS-8"),
+        "requires": "这四条在本次运行里都是「否决」",
+    },
+    {
+        "id": "as10_is_another_matter",
+        "claim": "AS-10 是另一件事（贴界 + 离线分支不是真反事实）。",
+        "requires_ids_failed": ("AS-10",),
+        "requires": "AS-10 在本次运行里是「否决」",
+    },
+)
+
 
 def _num(pattern: str, check: str, what: str) -> float:
     """从金标 `check` 原文里**抠出阈值**，而不是在代码里再抄一遍。
@@ -139,39 +169,47 @@ def alignment(rounds_doc: dict, gold: dict) -> dict:
     }
 
 
-def _railed(rounds_doc: dict) -> tuple[set[int], list[str]]:
-    """贴到 `_clamp(·, 0, 1)` 两端的（轮, 维）。**无自由参数。**
+def _railed_cells(rounds_doc: dict) -> set[tuple[str, int]]:
+    """贴到 `_clamp(·, 0, 1)` 两端的 **(维, 轮) 单元格**。**无自由参数。**
 
     一个值恰好等于 0.0000 或 1.0000，等价于「未截断前已经越界」—— 那是夹逼
     的产物。判据与 `brief.py` 的 `evidence.railed_rounds` 同一条：这里现算，
     是为了让本表不依赖某一份简报是否已经生成过。
+
+    **这是单元格，不是两个集合。** 下面 `_tainted` 的注释记着一次真实的误判：
+    把 (维集合 × 轮集合) 的乘积当成单元格，会把干净的操作数判成贴界。
     """
-    rounds, dims = set(), []
-    for r in rounds_doc["rounds"]:
-        hot = [d for d, v in r["state"].items() if round(v, 4) in (0.0, 1.0)]
-        if hot:
-            rounds.add(r["index"])
-            for d in hot:
-                if d not in dims:
-                    dims.append(d)
-    return rounds, sorted(dims)
+    return {(d, r["index"])
+            for r in rounds_doc["rounds"]
+            for d, v in r["state"].items()
+            if round(v, 4) in (0.0, 1.0)}
 
 
-def _tainted(operands: list[tuple[str, int]], railed_rounds: set[int],
-             railed_dims: list[str]) -> list[dict]:
-    """判据读过的那几个 (维, 轮) 里，有几个踩在贴界上。
+def _railed_view(cells: set[tuple[str, int]]) -> tuple[list[int], list[str]]:
+    """把单元格摊成给人看的两张清单（轮 / 维）。**只用于展示，不用于判定。**"""
+    return (sorted({i for _, i in cells}),
+            sorted({d for d, _ in cells}))
 
-    **按「读到的操作数」判，不按「整条断言沾没沾到贴界轮」判。** 后者会把
+
+def _tainted(operands: list[tuple[str, int]],
+             railed_cells: set[tuple[str, int]]) -> list[dict]:
+    """判据读过的那几个 (维, 轮) 里，有几个**那一格本身**踩在贴界上。
+
+    **按「读到的那一格」判，不按「整条断言沾没沾到贴界轮」判。** 后者会把
     几乎所有断言都染红：P5 那一轮（0 基 14）是贴界轮，而阶段级判据都要读它，
-    于是整张表只剩「不采信」三个字，等于什么也没说。前者是可机的：每个
-    求值函数如实声明它读了哪几个数。
+    于是整张表只剩「不采信」三个字，等于什么也没说。
+
+    **也不按「两个全局集合的乘积」判。** 这里原先写的是
+    `idx in railed_rounds and dim in railed_dims` —— 两条各自成立就染红，
+    于是「R14 因为 trust 贴界」＋「polarization 因为 R11~R13 贴界」合起来，
+    会把 `polarization@R14`（那一格实测 0.50，干净）判成贴界。它**比上面的
+    文档规则更严**，而且严错了方向：一个干净的操作数被判不可采信。
+    这是靠 `weiran/selfcheck.py` 的第三条反例（把相位三条改到及格线）翻出来的
+    —— 那一格里 P5 的极化被压到 0.50，而 R14 仍因别的维度在贴界轮名单里。
+    规则与实现不一致这件事本身，比它造成的误判更值得记下来。
     """
-    hits = []
-    for dim, idx in operands:
-        if idx in railed_rounds and dim in railed_dims:
-            hits.append({"dimension": dim, "round": idx,
-                         "value": None})
-    return hits
+    return [{"dimension": dim, "round": idx, "value": None}
+            for dim, idx in operands if (dim, idx) in railed_cells]
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +236,7 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
     # 只对**有阶段标签的那几轮**做阶段级判据 —— 这是金标说法的唯一落点。
     order = [pid for pid in ("P1", "P2", "P3", "P4", "P5") if pid in by_phase]
     states = {pid: rounds[by_phase[pid]]["state"] for pid in order}
-    railed_rounds, railed_dims = _railed(rounds_doc)
+    railed_cells = _railed_cells(rounds_doc)
     per_round = brief["rounds"]
 
     def op(dim: str, pid: str) -> tuple[str, int]:
@@ -209,7 +247,7 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
     def add(aid, verdict, values, detail, operands, *, trusted=True,
             no_trust=(), undecidable=None, to_fix=None, extra=None):
         """组装一条结果。**采信与结果是两个字段** —— 一条「通过」可以不可采信。"""
-        hits = _tainted(operands, railed_rounds, railed_dims)
+        hits = _tainted(operands, railed_cells)
         reasons = list(no_trust)
         if hits and NO_TRUST_RAIL not in reasons:
             reasons.append(NO_TRUST_RAIL)
@@ -253,13 +291,17 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
         pid, top, ties = _argmax(states, dim)
         all_pid, all_top, _ = _argmax({str(r["index"]): r["state"] for r in rounds}, dim)
         ok = (pid == "P3")
-        # 剔掉贴界轮的变体：只对确实被贴界污染的那几维有意义。
+        # 剔掉贴界轮的变体：**剔的是「这一维在这一轮贴界」的那些轮**，不是
+        # 「这一轮有任何一维贴界」的那些轮。后者对 attention 尤其错：R14 的
+        # attention 从未触界，却因为同轮的 trust/risk/stability 贴界而被剔掉，
+        # 于是给出一个「剔掉后 argmax 变成谁」的假变体。没有可剔的就不给变体
+        # —— 一个空的「剔掉后还是老样子」比没有更坏，它看起来像做过检验。
         clean = {p: s for p, s in states.items()
-                 if by_phase[p] not in railed_rounds}
+                 if (dim, by_phase[p]) not in railed_cells}
         alt = None
         if clean and len(clean) != len(states):
             alt_pid, alt_top, _ = _argmax(clean, dim)
-            alt = {"scope": "剔掉贴界轮的阶段轮",
+            alt = {"scope": f"剔掉 `{dim}` 自己贴界的阶段轮",
                    "argmax_phase": alt_pid, "value": round(alt_top, 4),
                    "rounds_used": [by_phase[p] for p in clean]}
         operands = [op(dim, p) for p in order]
@@ -413,16 +455,49 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
     return {
         "alignment": align,
         "railing": {
-            "railed_rounds": sorted(railed_rounds),
-            "railed_dims": railed_dims,
+            "railed_cells": sorted(f"{d}@R{i}" for d, i in railed_cells),
+            "railed_rounds": _railed_view(railed_cells)[0],
+            "railed_dims": _railed_view(railed_cells)[1],
             "rule": (
                 "一个值恰好等于 0.0000 或 1.0000 即为贴界（`_clamp(·, 0, 1)` 的"
-                "夹逼产物）。**判据读过的那几个 (维, 轮) 里只要有一个踩在贴界上，"
+                "夹逼产物）。**判据读过的那个 (维, 轮) 单元格只要本身踩在贴界上，"
                 "该条即「不采信」** —— 不是「结果作废」，是「这个结果不能当证据」。"
+                "**按单元格判，不按「沾没沾到贴界轮」判，也不按「轮集合 × 维集合」"
+                "的乘积判** —— 后两者会把干净的操作数判成贴界，把整张表染红。"
+                "`railed_rounds` / `railed_dims` 是两张给人看的汇总清单，"
+                "**不参与判定**；判定只看 `railed_cells`。"
             ),
         },
         "assertions": out,
     }
+
+
+def _interpretations(rows: list[dict]) -> list[dict]:
+    """按**本次运行的实际结果**决定每条解读讲不讲、以及为什么不讲。
+
+    这是 `INTERPRETATIONS` 那一段注释里那个修法的落点：解读不再是一句无条件的
+    断言，而是一句**带前提的**断言，前提由这里机检。
+    """
+    verdict = {r["id"]: r["verdict"] for r in rows}
+    out = []
+    for spec in INTERPRETATIONS:
+        observed = {aid: verdict.get(aid, "缺失")
+                    for aid in spec["requires_ids_failed"]}
+        missing = [aid for aid, v in observed.items() if v != FAIL_]
+        applies = not missing
+        out.append({
+            "id": spec["id"],
+            # 前提不成立时 `claim` 为 None，**不是空串** —— 空串会被渲染成
+            # 一行空白，看起来像「这条解读没话说」；None 才逼着渲染层交代原因。
+            "claim": spec["claim"] if applies else None,
+            "requires": spec["requires"],
+            "observed": observed,
+            "applies": applies,
+            "not_applicable_because": None if applies else (
+                "本次运行里 " + "、".join(f"{aid} 是「{observed[aid]}」" for aid in missing)
+                + " —— 该解读的前提不成立，所以没有输出"),
+        })
+    return out
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -442,12 +517,7 @@ def summarize(rows: list[dict]) -> dict:
              "because": "、".join(r["no_trust_because"])}
             for r in judged if not r["trusted"]
         ],
-        "one_defect_note": (
-            "**AS-2 / AS-3 / AS-4 / AS-8 四条否决指向同一条相位缺陷** —— "
-            "模型的状态峰值落在 P3 之后一到两轮（见 进度.md 的相位定案）。"
-            "不要读成四个独立问题：它们是同一个成因的四个落点。"
-            "AS-10 是另一件事（贴界 + 离线分支不是真反事实）。"
-        ),
+        "interpretations": _interpretations(rows),
     }
 
 
@@ -516,8 +586,15 @@ def render_markdown(doc: dict) -> str:
       f"**{len(s['trusted_ids'])} 条可采信**（{', '.join(s['trusted_ids']) or '无'}）—— "
       "其余的结果都不作数：不是「结果反了」，是「这个结果不能当证据」。")
     w("")
-    w(s["one_defect_note"])
-    w("")
+    # 解读**带着前提一起印**：前提成立才印那句话，不成立就明说它为什么没被输出。
+    # 直接印 `claim`（而不是先 `if applies` 判断再印）会让前提失效时这句话
+    # 静默变成 None、渲染出一行空白 —— 那正是这一段要修的病。
+    for it in s["interpretations"]:
+        if it["applies"]:
+            w(it["claim"])
+        else:
+            w(f"（解读 `{it['id']}` 未输出：{it['not_applicable_because']}）")
+        w("")
     if s["not_trusted"]:
         w("**不采信的条目**（不是「结果作废」，是「不能当证据」）：")
         w("")
