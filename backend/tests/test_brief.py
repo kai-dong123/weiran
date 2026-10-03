@@ -19,9 +19,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -929,6 +931,34 @@ def test_real_run_output_is_current():
     rebuilt = B.build_brief(rd, gd, command=stored["provenance"]["command"])
     assert B.render_markdown(rebuilt) == fresh_md, \
         "落盘的 brief.json 不是当前代码从这份产出重算出来的结果"
+
+
+def test_the_fingerprint_is_over_text_not_bytes():
+    """指纹按**文本**算，不按字节 —— 否则每个 clone 的人都会先撞一条假红。
+
+    `.gitattributes` 的 `eol=lf` 在检出时把行尾统一成 LF，而本机工作区是
+    CRLF：同一个文件在两个人的工作区里**字节不同、文本相同**。按字节算出来的
+    指纹钉住的是「谁的行尾配置」，不是「这份产出有没有变」。
+
+    差分对照是这条的另一半：**同一份内容**，一份 LF 一份 CRLF —— 文本指纹
+    必须相同，而**字节指纹必须不同**。没有后半句，「按文本算」与「这里碰巧
+    两边一样」看起来是一回事。
+
+    两个副本都现造，不拿工作区里那份当参照：本机工作区正是这件事的现场，
+    而它是**混的** —— clone 下来的文件是 CRLF、后来手写的文件是 LF。
+    """
+    text = '{\n  "a": 1\n}\n'
+    with tempfile.TemporaryDirectory() as d:
+        lf = Path(d) / "lf.json"
+        crlf = Path(d) / "crlf.json"
+        lf.write_bytes(text.encode("utf-8"))
+        crlf.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+
+        assert B._sha256(lf) == B._sha256(crlf), \
+            "同一份内容只是行尾不同，指纹却不一样 —— 它是按字节算的"
+        assert hashlib.sha256(lf.read_bytes()).hexdigest() != \
+            hashlib.sha256(crlf.read_bytes()).hexdigest(), \
+            "两个副本的字节竟然相同 —— 这条对照没有在测它想测的东西"
 
 
 # ---------------------------------------------------------------------------

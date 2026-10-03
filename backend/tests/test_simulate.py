@@ -604,7 +604,7 @@ def test_guard_keeps_its_own_timestamps_out_of_the_tool_call_window():
     `insufficient tool messages following tool_calls message`，而 OASIS 只记
     一行 error 继续跑 —— **该 agent 这一轮的动作整条消失**。
 
-    实测（12 agent × 3 轮，见 `_weiran_decay/epsilon_window.py`）：护栏开时
+    实测（12 agent × 3 轮，见开发期探针 `epsilon_window.py`，不随仓库交付）：护栏开时
     27 个配对里 6 个落进缝里、正好 6 次 400，逐请求 1:1、零反例；护栏关时
     0/30，终稿与请求的最小间隔 9.956e-04（≈整整一拍，够不到缝）。护栏不是
     缺陷的来源 —— 它是那扇门唯一的把手：写入够快才够得到，而它就是要让

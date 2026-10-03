@@ -175,8 +175,8 @@ AS-10 是另一件事（贴界 + 离线分支不是真反事实）。
 
 ## 五、这份表的来源
 
-- 推演产出：`twitter_rounds.json` sha256:ab4a3e0070a41aef（27 agent × 15 轮）
-- 金标：`reference_data.json` sha256:9f14e8578aa4bd45
+- 推演产出：`twitter_rounds.json` sha256:096f9662eaf9e723（27 agent × 15 轮）
+- 金标：`reference_data.json` sha256:fcd330fae6dbbb26
 - 命令：`python -m weiran.gold_check`
 - 复现：`python -m weiran.gold_check`（确定性，同输入同输出）
 

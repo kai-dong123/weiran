@@ -436,16 +436,28 @@ def test_handbook_contains_no_credential_value():
     """**红线**：凭据类环境变量的值，一个都不许出现在手册或 README 里。
 
     手册只写「键名 + 含义」。这条不靠人去逐条审，靠机器扫 ——
-    **而且扫的是真的那份 `.env`**，不只是模板。
+    **而且扫的是真的那份 `.env`**，不只是模板（模板里的值都是空的，
+    只扫模板等于没扫）。
 
     **失败消息里只报键名，不报值。** 这条断言要是红了，异常信息会被
     打印到终端、贴进 issue、录进屏幕 —— 一条把密钥打进报错里的红线检查，
     比没有这条检查更糟。
     """
+    # `.env` 不入库，干净 clone / CI 上就没有它 —— 那时只能扫模板，而模板里
+    # 凭据值全是空的，这一条**没测到**（不是通过，下面会印出来）。
+    # 这与 `_credential_values` 自己写明的契约一致：「读不到 `.env` 时只查
+    # 模板，不报错」。防恒真的闸因此只在**有** `.env` 时才该响：有 `.env` 却
+    # 一个值都读不出，那才是抽取逻辑坏了。此前的写法不区分这两件事 —— 于是
+    # 每一个照 README clone 下来的人，都会先撞到一条看起来像**密钥泄漏**的红。
+    has_real_env = (REPO_ROOT / ".env").is_file()
     creds = _credential_values()
-    assert creds, (
-        "没读到任何凭据类变量 —— 要么 .env.example 的键名改过了，"
-        "要么抽取逻辑失效了；无论哪种，这条断言现在都是**恒真的**")
+    if has_real_env:
+        assert creds, (
+            "本机有 .env，却没读出任何凭据类变量 —— 抽取逻辑失效了，"
+            "这条断言此刻是**恒真的**")
+    else:
+        print("      （本机没有 .env：这一条只扫了 .env.example，"
+              "真值那一路**没测到**，不是通过）")
     for path in (HANDBOOK, README):
         text = path.read_text(encoding="utf-8")
         for key, val in creds:

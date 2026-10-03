@@ -34,6 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from weiran import brief as B  # noqa: E402
 from weiran import viewer as V  # noqa: E402
 from weiran.config import REPO_ROOT, ensure_console_encoding  # noqa: E402
 
@@ -411,6 +412,18 @@ def test_footer_carries_provenance_on_every_page():
         assert prov["rounds_sha256"] in body, f"{path} 缺产出指纹"
         assert prov["scenario_sha256"] in body, f"{path} 缺金标指纹"
         assert prov["command"] in body, f"{path} 缺生成命令"
+
+
+def test_the_viewer_borrows_the_same_fingerprint_function():
+    """展示层用的必须是**同一个**指纹函数，不许自己再抄一份。
+
+    守的是一件具体发生过的事：`viewer` 曾经自己复制了一份 `read_bytes()` 版本
+    的指纹，于是「按文本算」这次修复只会落到一半 —— 页脚上的指纹与产物里记的
+    对不上，而且同样只有 clone 下来才看得见。金标对照表（`gold_check`）当初
+    就是从 `brief` 引同一个函数的。
+    """
+    assert V._sha256 is B._sha256, \
+        "展示层用的是另一份指纹函数 —— 两份里迟早有一份漏改"
 
 
 def test_text_is_escaped():

@@ -181,8 +181,8 @@ class SimulationResult:
     # 时间戳被单调推进过的条数（自己取读数、但离上一条不足一个步长的）。
     # **不要读成「本来会撞上 camel 那 1µs 窗口的条数」**：步长开着时，紧跟
     # 在一个 tool 配对后面的终稿几乎必然被推进（它离上一条只有微秒），所以
-    # 这个数约等于「写入很快的次数」。撞窗口要数的是另一件事，判据在
-    # `_weiran_decay/epsilon_window.py` —— 八支臂上与 400 次数逐一对齐。
+    # 这个数约等于「写入很快的次数」。撞窗口要数的是另一件事，判据在开发期
+    # 探针 `epsilon_window.py`（不随仓库交付）—— 八支臂上与 400 次数逐一对齐。
     chunking_timestamp_pushed: int = 0
     # 采样口径。**必须落盘**，而且是本项目唯一一条「N 支臂跑进一个目录之后
     # 文件里没有任何东西能区分谁是谁」的口子：多 seed 稳定性那套办法建立在
@@ -407,8 +407,8 @@ class ChunkingGuard:
     #: 时间戳被单调推进过的条数（自己取读数、但离上一条不足一个步长的）。
     #: **不要把它读成「本来会撞上那扇缝的条数」**：步长开着时，紧跟在一个
     #: tool 配对后面的终稿几乎必然被推进（它离上一条只有微秒），所以这个数
-    #: 约等于「写入很快的次数」。撞上窗口要数的是另一件事，判据在
-    #: `_weiran_decay/epsilon_window.py`（八支臂上与 400 次数逐一对齐）。
+    #: 约等于「写入很快的次数」。撞上窗口要数的是另一件事，判据在开发期
+    #: 探针 `epsilon_window.py`（不随仓库交付；八支臂上与 400 次数逐一对齐）。
     timestamp_pushed: int = 0
     original: object = None     # 被替换掉的原方法，供 remove 还原
     target: object = None       # 被替换方法的宿主类
@@ -474,7 +474,7 @@ def install_chunking_guard(target=None) -> ChunkingGuard:
     而 OASIS 只记一行 `Agent ... error` 就继续跑 —— **该 agent 这一轮的动作
     整条消失**。
 
-    实测（12 agent × 3 轮，同参数，见 `_weiran_decay/epsilon_window.py`）：
+    实测（12 agent × 3 轮，同参数，见开发期探针 `epsilon_window.py`，不随仓库交付）：
 
     ============  ========  ==========  ==============  ============
     臂            配对三连  落进窗口    终稿与请求间隔   400 次数

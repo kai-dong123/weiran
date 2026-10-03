@@ -407,10 +407,10 @@
   },
   "_provenance": {
     "rounds_file": "data/simulation/twitter_rounds.json",
-    "rounds_sha256": "ab4a3e0070a41aef",
+    "rounds_sha256": "096f9662eaf9e723",
     "scenario_dir": "benchmark/scenarios/employment_trust_crisis",
     "scenario_file": "benchmark/scenarios/employment_trust_crisis/reference_data.json",
-    "scenario_sha256": "9f14e8578aa4bd45",
+    "scenario_sha256": "fcd330fae6dbbb26",
     "command": "python -m weiran.gold_check"
   }
 }

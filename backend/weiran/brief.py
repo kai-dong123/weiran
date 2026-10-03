@@ -164,7 +164,22 @@ _NUMBER = re.compile(r"\d+\.\d+")
 # ---------------------------------------------------------------------------
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    """一份受版本控制的文本产出的指纹 —— **按文本算，不按字节**。
+
+    `read_bytes()` 是个只有**别人 clone 下来**才撞得到的坑：`.gitattributes`
+    的 `eol=lf` 会在检出时把行尾统一成 LF，而本机的工作区是 CRLF。同一个文件
+    在两个人的工作区里**字节不同、文本相同**，于是按字节算出来的指纹钉住的
+    是「谁的行尾配置」，不是「这份产出有没有变」—— 照 README 走一遍的人，
+    会先看到一条指向**不存在的问题**的红。
+
+    按文本算之后，LF 与 CRLF 两个副本给出同一个指纹。这不是把判据放松了：
+    行尾是 git 的合法产物，不是内容的改动。展示层与金标对照表都引这一个
+    函数（`viewer._sha256` 就是从这里取的）—— 同一件东西抄两份，迟早有一份
+    会漏改。
+    """
+    return hashlib.sha256(
+        path.read_text(encoding="utf-8").encode("utf-8")
+    ).hexdigest()[:16]
 
 
 def _rel(path: Path) -> str:

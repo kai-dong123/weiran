@@ -39,13 +39,15 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import html
 import json
 import sys
 from pathlib import Path
 
-from .brief import DEFAULT_ROUNDS_FILE
+# `_sha256` 从 `brief` 引，**不在这里另抄一份**：指纹要按文本算（行尾是 git
+# 的合法产物，不是内容的改动），同一件东西抄两份，迟早有一份漏改 —— 金标
+# 对照表当初也是这么从 `brief` 取同一个函数的。
+from .brief import DEFAULT_ROUNDS_FILE, _sha256
 from .config import (
     REPO_ROOT,
     ConfigError,
@@ -81,14 +83,6 @@ VERDICT_CLASS = {"通过": "ok", "否决": "bad", "不可判定": "undecided"}
 # ---------------------------------------------------------------------------
 # 取数：只读，缺失就如实说「没有」
 # ---------------------------------------------------------------------------
-
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()[:16]
-
 
 def _read_json(path: Path) -> dict | None:
     """读不到就返回 None。**不抛** —— 一份产物缺失是「这个页面显示不了」，

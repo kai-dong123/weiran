@@ -1,7 +1,7 @@
 # 「未然」校园舆情推演与决策辅助系统
 
 > 全球校园人工智能算法精英大赛（AIC）·「AI+开源」· 方向（一）开源赋能的 AI 应用创新
-> 状态：**开发中**（骨架与场景已就绪；六维闭环已接入逐轮循环，**决策简报已能产出**；
+> 状态：**功能完成，余下的研究项如实列在下面**（骨架与场景已就绪；六维闭环已接入逐轮循环，**决策简报已能产出**；
 > **已跑通 `--rounds 15` 的「轮 = 天」正式口径产出**；**已装上上下文截断监测
 > （agent 静默失忆是可检的了）**；**已跑金标规模 27 agent × 15 轮，并把「后段
 > 无信息」做成了无自由参数、可机检的降级项**；**已把金标里 17 条
@@ -16,7 +16,7 @@
 > 该 agent 该轮动作整条丢；修法是让 shim 成为该 agent 时间戳的唯一权威）**；
 > **已把「哪些层是随机的」做成可机检的声明，并把多 seed 批次工具与离线汇总器
 > 备好（零成本的一半已落地，批次待跑）**；
-> 432 条测试全绿，六层可复现性自检通过）
+> 434 条测试全绿，六层可复现性自检通过）
 
 > **要把它跑起来，看 [`docs/使用手册.md`](docs/使用手册.md)。**
 > 那份手册负责「怎么跑、产出在哪、每个字段怎么读、哪些数不能按字面读」；
@@ -83,7 +83,7 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 432 条，一次跑完（推荐）
+python -m pytest tests/             # 434 条，一次跑完（推荐）
 
 # 十六套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
@@ -91,13 +91,13 @@ python tests/test_world_state.py    # 23/23
 python tests/test_llm.py            # 33/33
 python tests/test_stance.py         # 26/26
 python tests/test_perception.py     # 49/49
-python tests/test_brief.py          # 55/55
+python tests/test_brief.py          # 56/56
 python tests/test_gold_check.py     # 31/31
 python tests/test_selfcheck.py      # 8/8
 python tests/test_simulate.py       # 36/36
 python tests/test_config.py         # 13/13
 python tests/test_repro_check.py    # 13/13
-python tests/test_viewer.py         # 24/24
+python tests/test_viewer.py         # 25/25
 python tests/test_stability.py      # 11/11
 python tests/test_stability_report.py  # 31/31
 python tests/test_run_seeds.py      # 37/37
@@ -268,25 +268,31 @@ backend/
     test_llm.py          33 条
     test_stance.py       26 条
     test_perception.py   49 条
-    test_brief.py        55 条
+    test_brief.py        56 条
     test_gold_check.py   31 条
     test_selfcheck.py     8 条
     test_simulate.py     36 条
     test_config.py       13 条
     test_repro_check.py  13 条
-    test_viewer.py       24 条
+    test_viewer.py       25 条
     test_stability.py    11 条
     test_stability_report.py  31 条
     test_run_seeds.py    37 条
     test_handbook.py     28 条
-    —— 共 432 条，`python -m pytest tests/` 一次跑完
+    —— 共 434 条，`python -m pytest tests/` 一次跑完
 data/
   simulation/                      推演产出（入库：是「跑得通」的证据）
     twitter_rounds.json            27 agent × 15 轮：逐轮状态、行为、成本、
                                    注入次数、截断次数、证据量。**后段是崩的，
                                    这份产出留着就是为了那个**
     brief.md / brief.json          决策简报（上一份产出的对照，不调 LLM）
-    *_profiles.*  *_cache.json     OASIS profile 与归类缓存
+    gold_check.md / gold_check.json 金标对照表：10 条自写断言 × 三态结论
+                                   （**亮点②就在这份里**）
+    actor_knowledge.json           事实按角色、按阶段注入的知情映射
+    twitter_profiles.csv           OASIS profile（入库）
+    reddit_profiles.json           同上（Reddit 侧）
+    *_cache.json                   OASIS profile 与归类缓存 —— **不入库**
+                                   （`.gitignore`），干净 clone 里没有它也能跑
 benchmark/
   scenarios/
     employment_trust_crisis/     虚构场景：某大学《就业质量报告》信任危机
@@ -295,7 +301,7 @@ benchmark/
       reference_data.json        金标：期望状态、事件顺序、角色、可机检断言
 docs/
   开源及第三方资源使用清单.md      参赛必交附件，随开发持续更新
-进度.md                          实时进度日志
+进度.md                          开发期进度日志（**如实保留，未做删改**）
 ```
 
 ---

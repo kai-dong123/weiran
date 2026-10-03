@@ -20,7 +20,7 @@
 - 全程 767 次记忆截断，单次最多丢弃 1234443 token —— 最坏的那一轮里，agent 能看到的记忆**不超过自己的 1.31%**（丢弃量是窗口上限的 75 倍），而且 camel 是**按打分**丢低分的—— 留下的不保证是最近的那一段。被截断轮次的 agent 在丢失历史的状态下说话，数字要打折
 - R9、R10、R11、R12、R13、R14 有维度**恰好贴到上下界**（极化、风险、稳定、信任）—— `_clamp(·, 0, 1)` 的边界产物，不是读数；这些轮次的曲线形状由夹逼决定，不由行为决定
 
-来源指纹：`twitter_rounds.json` sha256:ab4a3e0070a41aef ± `reference_data.json` sha256:9f14e8578aa4bd45
+来源指纹：`twitter_rounds.json` sha256:096f9662eaf9e723 ± `reference_data.json` sha256:fcd330fae6dbbb26
 
 ## 【一】决策窗口对照
 
