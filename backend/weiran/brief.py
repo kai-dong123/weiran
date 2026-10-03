@@ -167,6 +167,20 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
+def _rel(path: Path) -> str:
+    """相对仓库根的路径（正斜杠）；不在仓库内则原样返回。
+
+    指纹里记**相对路径**而不是绝对路径：绝对路径把「本机目录」焊进了入库产物，
+    换台机器、或仓库换个位置，产物就和产生它的那次运行对不上 —— 而这份产物的
+    全部意义就是「我看到的和它说的是同一件事」。相对路径让它在任何克隆位置
+    都能自我复现。
+    """
+    try:
+        return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def load_rounds(path: Path) -> dict:
     """读一份推演产出，并记下它的指纹。
 
@@ -188,7 +202,7 @@ def load_rounds(path: Path) -> dict:
     if not doc["rounds"]:
         raise BriefError(f"{path.name} 的 rounds 是空的，没有可对照的轮次。")
     doc["_provenance"] = {
-        "rounds_file": str(path),
+        "rounds_file": _rel(path),
         "rounds_sha256": _sha256(path),
     }
     return doc
@@ -210,8 +224,8 @@ def load_gold(scenario_dir: Path) -> dict:
     for ph in ref.get("phases", []):
         ph.pop("reference_shape", None)
     ref["_provenance"] = {
-        "scenario_dir": str(scenario_dir),
-        "scenario_file": str(path),
+        "scenario_dir": _rel(scenario_dir),
+        "scenario_file": _rel(path),
         "scenario_sha256": _sha256(path),
     }
     return ref
