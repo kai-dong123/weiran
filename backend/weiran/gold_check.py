@@ -273,13 +273,43 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
         out.append(row)
         return row
 
+    def need_phases(aid: str, *needs: str, what: str) -> bool:
+        """这几条阶段级判据的**前置**：它要读的那几个阶段，这一轮里有没有落点。
+
+        返回 True 表示可以往下判；缺的阶段当场记成 **`不可判定`**，并带上
+        「缺什么、怎么才能判」。
+
+        **这不是防御式编程。** 阶段落点是「这一轮注入了哪个阶段」
+        （`rounds[*].phase_id` 非空的那几轮）：跑一次 `--no-phases`，或者轮数
+        不够那个阶段该出现的位置，它就**根本没有**。原先这些判据直接写
+        `states["P1"]`，于是整张表当场 `KeyError` 死掉 —— 十条断言一条都读不到。
+        而缺读数折成「否决」正是本仓库在别处反复拦的那件事（AS-7/AS-9 就是
+        这么处理的）：**读不到是「没测到」，不是「没通过」。**
+        """
+        gone = [p for p in needs if p not in by_phase]
+        if not gone:
+            return True
+        add(aid, UNDECIDED, {},
+            f"这一轮里 {'、'.join(gone)} 没有落点（`rounds[*].phase_id` 里找不到"
+            f"它们）—— 这条判据要读的是{what}，量不存在。"
+            "**这是「没测到」，不是「没通过」**，所以既不判通过也不判否决。",
+            [], undecidable=f"缺阶段落点：{'、'.join(gone)}",
+            to_fix=(
+                "跑一次真正注入阶段事件的推演（去掉 `--no-phases`），并让轮数覆盖"
+                "到这个阶段该出现的位置（金标 `phases[].day` 就是那个位置）。"
+            ))
+        return False
+
     # -- AS-1 方向 --------------------------------------------------------
-    t1, t2, t3 = states["P1"]["trust"], states["P2"]["trust"], states["P3"]["trust"]
-    add("AS-1", PASS_ if (t3 < t2 < t1) else FAIL_,
-        {"trust(P1)": round(t1, 4), "trust(P2)": round(t2, 4), "trust(P3)": round(t3, 4)},
-        f"{t3:.4f} < {t2:.4f} < {t1:.4f}" if t3 < t2 < t1
-        else f"不成立：{t3:.4f} / {t2:.4f} / {t1:.4f}",
-        [op("trust", "P1"), op("trust", "P2"), op("trust", "P3")])
+    if need_phases("AS-1", "P1", "P2", "P3", what="P1/P2/P3 三个阶段的 trust"):
+        t1, t2, t3 = (states["P1"]["trust"], states["P2"]["trust"],
+                      states["P3"]["trust"])
+        add("AS-1", PASS_ if (t3 < t2 < t1) else FAIL_,
+            {"trust(P1)": round(t1, 4), "trust(P2)": round(t2, 4),
+             "trust(P3)": round(t3, 4)},
+            f"{t3:.4f} < {t2:.4f} < {t1:.4f}" if t3 < t2 < t1
+            else f"不成立：{t3:.4f} / {t2:.4f} / {t1:.4f}",
+            [op("trust", "P1"), op("trust", "P2"), op("trust", "P3")])
 
     # -- AS-2 / AS-4 次序 -------------------------------------------------
     argmax_note = (
@@ -288,6 +318,18 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
         "上有落点；另一个口径的读数同时印出来供核对。"
     )
     for aid, dim in (("AS-2", "attention"), ("AS-4", "polarization")):
+        if not need_phases(aid, "P3", what=f"P3 上的 {dim}"):
+            continue
+        if len(order) < 2:
+            # 只落下一个阶段轮时 argmax 恒等于它 —— 这条判据在这份数据上
+            # **恒真**，而恒真的通过没有任何信息量（本表在 AS-5 上已经写过
+            # 一次这件事）。判「不可判定」而不是「通过」。
+            add(aid, UNDECIDED, {},
+                f"这一轮里只有 {order[0]} 一个阶段有落点 —— argmax 恒等于它，"
+                "这条判据在这份数据上恒真，通过与不通过都没有内容。",
+                [], undecidable="有落点的阶段少于两个，argmax 无从比较",
+                to_fix="把轮数放够，让金标 `phases[].day` 的 5 个位置都落在推演里。")
+            continue
         pid, top, ties = _argmax(states, dim)
         all_pid, all_top, _ = _argmax({str(r["index"]): r["state"] for r in rounds}, dim)
         ok = (pid == "P3")
@@ -317,44 +359,48 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
             operands, extra={"argmax_rule": argmax_note, "variant": alt})
 
     # -- AS-3 阈值 --------------------------------------------------------
-    thr3 = _num(r">=\s*(\d+\.\d+)", gold["assertions_by_id"]["AS-3"]["check"],
-                "风险阈值")
-    r3 = states["P3"]["risk"]
-    add("AS-3", PASS_ if r3 >= thr3 else FAIL_,
-        {"risk(P3)": round(r3, 4), "threshold": thr3},
-        f"risk(P3) = {r3:.4f}，金标阈值 {thr3:.2f} —— 差 {thr3 - r3:.4f}",
-        [op("risk", "P3")], extra={"threshold_from": "金标 check 原文"})
+    if need_phases("AS-3", "P3", what="P3 上的 risk"):
+        thr3 = _num(r">=\s*(\d+\.\d+)", gold["assertions_by_id"]["AS-3"]["check"],
+                    "风险阈值")
+        r3 = states["P3"]["risk"]
+        add("AS-3", PASS_ if r3 >= thr3 else FAIL_,
+            {"risk(P3)": round(r3, 4), "threshold": thr3},
+            f"risk(P3) = {r3:.4f}，金标阈值 {thr3:.2f} —— 差 {thr3 - r3:.4f}",
+            [op("risk", "P3")], extra={"threshold_from": "金标 check 原文"})
 
     # -- AS-5 不对称 ------------------------------------------------------
-    a3, a5 = states["P3"]["attention"], states["P5"]["attention"]
-    t5 = states["P5"]["trust"]
-    left = a3 - a5
-    right = 3 * (t5 - t3)
-    # **这一条要自己报「恒真」。** 右端 = 3×(trust(P5)−trust(P3))：信任若是
-    # 下降的，右端为负，而左端（关注回落量）几乎总是正的 —— 于是判据自动成立，
-    # 与它所声称要测的「不对称」无关。判据恒真时，通过没有任何信息量。
-    vacuous = right <= 0
-    add("AS-5", PASS_ if left > right else FAIL_,
-        {"left": round(left, 4), "right": round(right, 4),
-         "attention(P3)-attention(P5)": round(left, 4),
-         "3*(trust(P5)-trust(P3))": round(right, 4)},
-        f"左端 {left:.4f}，右端 {right:.4f}。"
-        + (f" **右端为负（信任下降 {t5 - t3:+.4f}），这条判据在该数据上恒真** —— "
-           f"它与「不对称」无关：把信任换成任何一个下降得更快的量，结论一样。"
-           if vacuous else ""),
-        [op("attention", "P3"), op("attention", "P5"),
-         op("trust", "P3"), op("trust", "P5")],
-        trusted=not vacuous,
-        no_trust=(NO_TRUST_VACUOUS,) if vacuous else ())
+    if need_phases("AS-5", "P3", "P5", what="P3/P5 上的 attention 与 trust"):
+        a3, a5 = states["P3"]["attention"], states["P5"]["attention"]
+        t3, t5 = states["P3"]["trust"], states["P5"]["trust"]
+        left = a3 - a5
+        right = 3 * (t5 - t3)
+        # **这一条要自己报「恒真」。** 右端 = 3×(trust(P5)−trust(P3))：信任若是
+        # 下降的，右端为负，而左端（关注回落量）几乎总是正的 —— 于是判据自动
+        # 成立，与它所声称要测的「不对称」无关。判据恒真时，通过没有信息量。
+        vacuous = right <= 0
+        add("AS-5", PASS_ if left > right else FAIL_,
+            {"left": round(left, 4), "right": round(right, 4),
+             "attention(P3)-attention(P5)": round(left, 4),
+             "3*(trust(P5)-trust(P3))": round(right, 4)},
+            f"左端 {left:.4f}，右端 {right:.4f}。"
+            + (f" **右端为负（信任下降 {t5 - t3:+.4f}），这条判据在该数据上恒真** —— "
+               f"它与「不对称」无关：把信任换成任何一个下降得更快的量，结论一样。"
+               if vacuous else ""),
+            [op("attention", "P3"), op("attention", "P5"),
+             op("trust", "P3"), op("trust", "P5")],
+            trusted=not vacuous,
+            no_trust=(NO_TRUST_VACUOUS,) if vacuous else ())
 
     # -- AS-6 不可逆 ------------------------------------------------------
-    drop = _num(r"-\s*(\d+\.\d+)", gold["assertions_by_id"]["AS-6"]["check"],
-                "回落幅度")
-    add("AS-6", PASS_ if t5 < t1 - drop else FAIL_,
-        {"trust(P5)": round(t5, 4), "trust(P1)": round(t1, 4),
-         "trust(P1)-0.10": round(t1 - drop, 4)},
-        f"trust(P5) = {t5:.4f}，基线减 {drop:.2f} 是 {t1 - drop:.4f}",
-        [op("trust", "P5"), op("trust", "P1")])
+    if need_phases("AS-6", "P1", "P5", what="P1/P5 两端的 trust"):
+        drop = _num(r"-\s*(\d+\.\d+)", gold["assertions_by_id"]["AS-6"]["check"],
+                    "回落幅度")
+        t1, t5 = states["P1"]["trust"], states["P5"]["trust"]
+        add("AS-6", PASS_ if t5 < t1 - drop else FAIL_,
+            {"trust(P5)": round(t5, 4), "trust(P1)": round(t1, 4),
+             "trust(P1)-0.10": round(t1 - drop, 4)},
+            f"trust(P5) = {t5:.4f}，基线减 {drop:.2f} 是 {t1 - drop:.4f}",
+            [op("trust", "P5"), op("trust", "P1")])
 
     # -- AS-7 事件顺序：不可判定 ------------------------------------------
     add("AS-7", UNDECIDED, {},
@@ -376,7 +422,9 @@ def evaluate(rounds_doc: dict, gold: dict, brief: dict) -> dict:
     alert_rounds = [r["index"] for r in per_round
                     for e in r["events"] if e["kind"] == "risk_alert"]
     p2_idx = by_phase.get("P2")
-    if not alert_rounds:
+    if not need_phases("AS-8", "P2", what="金标要求的那条线（P2 那一轮）"):
+        pass                    # 没有 P2 就没法比「晚了多少轮」，见 need_phases
+    elif not alert_rounds:
         add("AS-8", UNDECIDED, {},
             "产出全程没有任何 `risk_alert` —— 按本表的定义，「从未预警」，"
             "但本表**不把「从未发生」记成「否决」**：先把定义写清再判。",

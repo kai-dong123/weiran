@@ -163,6 +163,63 @@ def test_undecidable_rows_are_not_counted_as_pass_or_fail():
         assert r["to_make_decidable"], f"{aid} 没说还缺什么才能判"
 
 
+def _without_phase(pid: str | None) -> dict:
+    """把 `phase_id` 抹掉（`pid=None` 就全抹掉）之后的表 —— 即「阶段没有落点」。
+
+    产出里 `rounds[*].phase_id` 记的是「这一轮注入了哪个阶段」，只有少数轮非空。
+    跑一次 `--no-phases`、或轮数不够某个阶段该出现的位置，它就**根本没有** ——
+    而阶段级判据读的正是那些轮。以前那条路径会让整张表 `KeyError` 死掉。
+    """
+    rd, gold, _ = _load()
+    rd = copy.deepcopy(rd)
+    hit = 0
+    for r in rd["rounds"]:
+        if pid is None or r.get("phase_id") == pid:
+            hit += 1 if r.get("phase_id") else 0
+            r["phase_id"] = ""
+    if pid is not None:
+        assert hit == 1, f"这份产出里 {pid} 的落点有 {hit} 处，测试的假设不成立"
+    brief = G.build_brief(rd, gold, command=G.DEFAULT_COMMAND)
+    return G.evaluate(rd, copy.deepcopy(gold), brief)
+
+
+def test_without_any_phase_reading_the_table_says_undecided_instead_of_dying():
+    """一个阶段都没有落点时：**十条断言都要在**，阶段级的那几条判「不可判定」。
+
+    原先这里直接 `states["P1"]` —— `KeyError` 把整张表带走，十条断言一条都
+    读不到。而「读不到」在别处（AS-7/AS-9）一律记「不可判定」：**缺读数不是
+    「没通过」**，这里也得是同一条规矩。
+    """
+    doc = _without_phase(None)
+    rows = {r["id"]: r for r in doc["assertions"]}
+    assert len(rows) == 10, f"表被吞掉了几条：{sorted(rows)}"
+    for aid in ("AS-1", "AS-2", "AS-3", "AS-4", "AS-5", "AS-6", "AS-8"):
+        r = rows[aid]
+        assert r["verdict"] == G.UNDECIDED, f"{aid} 判成了 {r['verdict']}"
+        assert r["trusted"] is None, f"{aid} 不可判定却在谈采信"
+        assert r["undecidable_because"], f"{aid} 没说缺什么"
+        assert r["to_make_decidable"], f"{aid} 没说怎么才能判"
+    s = G.summarize(doc["assertions"])
+    assert s["judged"] == s["total"] - len(
+        [r for r in doc["assertions"] if r["verdict"] == G.UNDECIDED])
+
+
+def test_only_the_assertions_that_read_the_missing_phase_go_undecided():
+    """缺哪个阶段，只影响**读过那个阶段**的断言 —— 一格一格判，不连坐。
+
+    这条守的是上面那条的边界：一刀切（「只要缺阶段就全判不可判定」）也能让
+    全套测试变绿，但那会把一条**本来判得出来**的断言说成判不了。
+    """
+    rows = {r["id"]: r for r in _without_phase("P5")["assertions"]}
+    # 读过 P5 的两条：读不到就读不到。
+    for aid in ("AS-5", "AS-6"):
+        assert rows[aid]["verdict"] == G.UNDECIDED, f"{aid} 读了 P5 却还判了"
+    # 没读 P5 的两条：P5 有没有落点与它们无关，照判。
+    for aid in ("AS-1", "AS-3"):
+        assert rows[aid]["verdict"] != G.UNDECIDED, \
+            f"{aid} 不读 P5，却被连坐成不可判定"
+
+
 def test_undecidable_rows_do_not_enter_the_trusted_denominator():
     """「判得出来的有几条」这个分母里不许混进不可判定的。"""
     doc, _ = _table()
