@@ -16,7 +16,7 @@
 > 该 agent 该轮动作整条丢；修法是让 shim 成为该 agent 时间戳的唯一权威）**；
 > **已把「哪些层是随机的」做成可机检的声明，并把多 seed 批次工具与离线汇总器
 > 备好（零成本的一半已落地，批次待跑）**；
-> 434 条测试全绿，六层可复现性自检通过）
+> 437 条测试全绿，六层可复现性自检通过）
 
 > **要把它跑起来，看 [`docs/使用手册.md`](docs/使用手册.md)。**
 > 那份手册负责「怎么跑、产出在哪、每个字段怎么读、哪些数不能按字面读」；
@@ -83,7 +83,7 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 434 条，一次跑完（推荐）
+python -m pytest tests/             # 437 条，一次跑完（推荐）
 
 # 十六套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
@@ -101,7 +101,7 @@ python tests/test_viewer.py         # 25/25
 python tests/test_stability.py      # 11/11
 python tests/test_stability_report.py  # 31/31
 python tests/test_run_seeds.py      # 37/37
-python tests/test_handbook.py       # 28/28
+python tests/test_handbook.py       # 31/31
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
 python -m weiran.brief              # 决策简报（读已有产出，不调 LLM）
@@ -278,8 +278,8 @@ backend/
     test_stability.py    11 条
     test_stability_report.py  31 条
     test_run_seeds.py    37 条
-    test_handbook.py     28 条
-    —— 共 434 条，`python -m pytest tests/` 一次跑完
+    test_handbook.py     31 条
+    —— 共 437 条，`python -m pytest tests/` 一次跑完
 data/
   simulation/                      推演产出（入库：是「跑得通」的证据）
     twitter_rounds.json            27 agent × 15 轮：逐轮状态、行为、成本、

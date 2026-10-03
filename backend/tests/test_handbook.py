@@ -791,6 +791,151 @@ def test_the_documented_suite_count_matches_the_directory():
     assert not bad, "\n  ".join(bad)
 
 
+# -- 清单第二节那张依赖表：与仓库实际声明要装的东西对齐 ----------------------
+#
+# 这一组是补一个**真漏过的洞**：第二节曾经漏掉 6 个第三方依赖，而清单是参赛
+# 必交附件 —— 按规则读，「隐瞒来源」是一票否决。漏的原因很朴素：
+# `requirements.txt` 是一次性写完的，而清单自己那句「每新增一个第三方依赖，
+# 当场补一行」**没有任何东西在核**。文档不会自己发现自己在说谎。
+
+REQUIREMENTS = REPO_ROOT / "requirements.txt"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
+
+#: 「类型」这一列里出现这些词的行 = 它真的是一个要用 pip 装的包。
+#: 模型服务与模型权重不走 pip，不适用这几条断言。
+_PKG_KINDS = ("Python 库", "测试工具")
+
+
+def _norm_pkg(name: str) -> str:
+    """PEP 503 归一化：`camel_oasis` / `Camel-Oasis` / `camel-oasis` 是同一个包。"""
+    return re.sub(r"[-_.]+", "-", name).strip().lower()
+
+
+def _requirements_txt() -> list[str]:
+    """`requirements.txt` 里每一条安装声明。注释与 `-r` / `-c` 这类开关行跳过。"""
+    out = []
+    for raw in REQUIREMENTS.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line and not line.startswith("-"):
+            out.append(line)
+    return out
+
+
+def _pyproject_requirements() -> list[str]:
+    """`pyproject.toml` 的 `dependencies` 数组。
+
+    **刻意用正则而不引 `tomllib`**：`tomllib` 要到 Python 3.11 才有，而本仓库的
+    `requires-python` 是 `>=3.10` —— 为了读四行声明把 3.10 上的读者卡住不划算。
+    代价是这个正则只认「一个方括号块」的写法；格式一旦变复杂，下面的断言会红，
+    而那是好事（比安静地少读几条强）。
+    """
+    text = PYPROJECT.read_text(encoding="utf-8")
+    m = re.search(r"^dependencies\s*=\s*\[(.*?)\]", text, re.M | re.S)
+    assert m, "pyproject.toml 里找不到 dependencies 数组 —— 格式变过了"
+    return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def _declared_requirements() -> dict[str, str]:
+    """仓库实际声明要装的包名 → 它写在哪份文件里。两份都读。"""
+    declared: dict[str, str] = {}
+    for spec in _requirements_txt():
+        m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", spec)
+        assert m, f"requirements.txt 里这一行读不出包名：{spec!r}"
+        declared.setdefault(m.group(1), "requirements.txt")
+    for spec in _pyproject_requirements():
+        m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", spec)
+        assert m, f"pyproject.toml 里这一条读不出包名：{spec!r}"
+        declared.setdefault(m.group(1), "pyproject.toml")
+    return declared
+
+
+def _dependency_rows() -> list[dict[str, str]]:
+    """清单第二节那张表的逐行 → dict。
+
+    **范围由 `## 二、` 与 `## 三、` 两个标题划死** —— 第三节也是表格，
+    全文扫会把模块行一起收进来（同 §3.5 那张降级项表踩过的坑）。
+    只认单元格数正好是 7 的行：表头与分隔行自然落选。
+    """
+    text = MANIFEST.read_text(encoding="utf-8")
+    start = text.find("## 二、")
+    end = text.find("## 三、")
+    assert start >= 0 and end > start, "清单里找不到 §二 / §三 的标题 —— 编号变过了"
+    rows = []
+    for line in text[start:end].splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) != 7 or cells[0] == "名称":
+            continue
+        rows.append(dict(zip(
+            ("名称", "类型", "版本", "许可证", "使用方式", "义务", "合规状态"), cells)))
+    return rows
+
+
+def test_every_installed_dependency_has_a_row_in_the_inventory():
+    """**每个要装的东西，第二节都得有一行。**
+
+    清单是参赛必交附件；漏一行就少声明一个来源，而「隐瞒来源」是一票否决。
+    这条同时管两份声明文件：`requirements.txt`（运行时 + 仿真内核）与
+    `pyproject.toml`（`pip install -e .` 那条路）。
+    """
+    declared = _declared_requirements()
+    assert len(declared) >= 6, (
+        f"只认出 {len(declared)} 条安装声明 —— 解析器多半失配了（防恒真的下限）")
+    rows = _dependency_rows()
+    assert len(rows) >= 9, f"只认出 {len(rows)} 行依赖 —— 解析器多半失配了"
+    have = {_norm_pkg(r["名称"].strip("`")) for r in rows}
+    missing = sorted(f"{name}（写在 {where}）"
+                     for name, where in declared.items() if _norm_pkg(name) not in have)
+    assert not missing, (
+        "清单第二节里没有这些依赖的行：\n  " + "\n  ".join(missing))
+
+
+def test_every_package_row_is_either_installed_or_marked_as_transitive():
+    """反方向：第二节里每个「包」行，要么真在 `requirements.txt` / `pyproject.toml` 里，
+    要么**明写着**它为什么不在。
+
+    「不在一份声明里」本身不是错 —— `tiktoken` 随 `camel-ai` 传递安装、
+    `pytest` 是开发期工具，两个都真的不该写进运行时依赖。错的是**没说**：
+    读者分不清那是漏了还是故意的。所以豁免的判据不是「我觉得可以」，
+    而是版本那一格里写着「未直接 pin」—— 一句可核的声明。
+    """
+    declared = {_norm_pkg(n) for n in _declared_requirements()}
+    bad = []
+    for r in _dependency_rows():
+        if not any(k in r["类型"] for k in _PKG_KINDS):
+            continue                      # 模型服务 / 模型权重不走 pip
+        name = r["名称"].strip("`")
+        if _norm_pkg(name) in declared or "未直接 pin" in r["版本"]:
+            continue
+        bad.append(f"{name}：不在 requirements.txt / pyproject.toml 里，"
+                   f"版本格也没写「未直接 pin」")
+    assert not bad, "清单第二节这几行的安装来源说不清：\n  " + "\n  ".join(bad)
+
+
+def test_every_dependency_row_states_a_license_and_agrees_with_its_status():
+    """许可证与合规状态两格都不许空，且**两格之间不许自相矛盾**。
+
+    这条落在最硬的那条红线上：「隐瞒来源＝一票否决」，而它的反面
+    「完整说明来源与自研边界」是 20 分项的满分档。**一个空格两样都不占** ——
+    既没说来源，也没告诉读者「我们没核」。真话（哪怕只是「待核实」）得自己说出来。
+
+    所以「待核实」是**允许**的，前提是合规状态那一格也得挂着 ⚠️：
+    上游推荐系统那个模型权重就是这样如实记着的。**允许未核实，不许假装核实过。**
+    """
+    bad = []
+    for r in _dependency_rows():
+        lic = r["许可证"].strip("`* ")
+        status = r["合规状态"].strip("`* ")
+        if not lic:
+            bad.append(f"{r['名称']}：许可证格是空的")
+        if not status:
+            bad.append(f"{r['名称']}：合规状态格是空的")
+        if "待核实" in lic and "⚠️" not in r["合规状态"]:
+            bad.append(f"{r['名称']}：许可证写着「待核实」，合规状态却没挂 ⚠️")
+    assert not bad, "清单第二节这几行的许可证/状态有问题：\n  " + "\n  ".join(bad)
+
+
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:
