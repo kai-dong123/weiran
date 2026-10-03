@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "weiran"
 version = "0.1.0"
-description = "「未然」—— 校园舆情推演与决策辅助系统"
+description = "「未然」校园舆情推演与决策辅助系统"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-only" }
