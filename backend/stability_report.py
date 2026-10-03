@@ -71,8 +71,12 @@ PROTOCOL_KEYS = (
     "chunking_guard", "temperature",
 )
 
-#: 臂目录里必须与底本逐字节一致的那三个输入。**缺一个都不是一批** ——
-#: `stance_cache.json` 尤其：它是跨运行共享且会被改写的，谁先跑谁占缓存。
+#: 臂目录里必须与底本逐字节一致的输入。**两个必需件缺一个都不是一批** ——
+#: `stance_cache.json` 尤其要按值比：它是跨运行共享且会被改写的，谁先跑谁占缓存。
+#:
+#: 它是**可选**的（不入库，见 `.gitignore:42`），所以「这一批都没有」也是一致的
+#: 取值 —— 下面按值分组时，全体 `None` 落在一组、不会误报；而「有的有、有的没有」
+#: 会分成两组，照报不误。
 INPUT_FILES = ("twitter_profiles.csv", "actor_knowledge.json",
                "stance_cache.json")
 

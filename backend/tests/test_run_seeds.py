@@ -255,7 +255,7 @@ def test_a_non_integer_seed_is_refused():
 
 
 def test_a_missing_master_input_is_refused():
-    """缺一个输入就拒绝 —— 「臂之间输入同源」这句话需要三个都在。"""
+    """缺一个**必需**输入就拒绝 —— 「臂之间输入同源」这句话要的是这两个都在。"""
     root = Path(tempfile.mkdtemp(prefix="weiran-nomaster-"))
     master = _master(root)
     (master / RS.INPUT_FILES[0]).unlink()
@@ -265,6 +265,87 @@ def test_a_missing_master_input_is_refused():
         assert RS.INPUT_FILES[0] in str(exc)
     else:
         raise AssertionError("底本缺件没被拦下")
+    # 两个必需件都试一遍 —— 只试第一个的话，第二个被误划进可选也看不出来。
+    root2 = Path(tempfile.mkdtemp(prefix="weiran-nomaster2-"))
+    master2 = _master(root2)
+    (master2 / RS.REQUIRED_INPUTS[1]).unlink()
+    try:
+        RS.hash_master(master2)
+    except RS.BatchRefused as exc:
+        assert RS.REQUIRED_INPUTS[1] in str(exc)
+    else:
+        raise AssertionError("第二个必需件缺了没被拦下")
+
+
+def _master_without_optional(root: Path) -> Path:
+    """一份**没有** `stance_cache.json` 的底本 —— 刚 clone 下来就是这个样子。"""
+    master = _master(root)
+    (master / RS.OPTIONAL_INPUTS[0]).unlink()
+    return master
+
+
+def test_an_absent_optional_input_is_recorded_not_refused():
+    """**新 clone 上必须跑得起来。** `stance_cache.json` 不入库（`.gitignore:42`），
+    所以「底本没有它」是正常状态，不是残缺 —— 只有必需的那两个才拦。
+    「没有」要**如实记下来**，不是当没这回事。"""
+    root = Path(tempfile.mkdtemp(prefix="weiran-optional-"))
+    master = _master_without_optional(root)
+
+    hashes = RS.hash_master(master)                     # 不抛
+    assert hashes[RS.REQUIRED_INPUTS[0]]
+    assert hashes[RS.OPTIONAL_INPUTS[0]] is None        # 记成「本次底本没有」
+    assert RS.absent_optional(hashes) == [RS.OPTIONAL_INPUTS[0]]
+
+    fake = _FakeRun()
+    plan = _plan([11], master, root / "runs")[0]
+    _with_fake(lambda: RS.run_arm(plan, master, hashes), fake)
+    assert fake.calls, "可选输入缺了就不起进程了？—— 那还是拒绝"
+    for name in RS.REQUIRED_INPUTS:
+        assert (plan.out_dir / name).is_file()
+    assert not (plan.out_dir / RS.OPTIONAL_INPUTS[0]).exists()
+    got = json.loads((plan.out_dir / "arm.json").read_text(encoding="utf-8"))
+    assert got["inputs"][RS.OPTIONAL_INPUTS[0]] is None
+    assert got["inputs_absent"] == [RS.OPTIONAL_INPUTS[0]]
+
+
+def test_a_stale_optional_copy_in_the_arm_dir_is_not_mistaken_for_this_master():
+    """底本没有它，而 `out_dir` 里躺着上一轮留下的一份 —— 那一份要被删掉。
+
+    留着就正好是这份脚本要防的那件事：**谁先跑谁占缓存**，而这一份连底本
+    都不是 —— 它会把「这次用的是哪份输入」变成一个没人答得上来的问题。"""
+    root = Path(tempfile.mkdtemp(prefix="weiran-stale-"))
+    master = _master_without_optional(root)
+    hashes = RS.hash_master(master)
+    plan = _plan([11], master, root / "runs")[0]
+    plan.out_dir.mkdir(parents=True, exist_ok=True)
+    stale = plan.out_dir / RS.OPTIONAL_INPUTS[0]
+    stale.write_bytes("上一轮的缓存".encode())
+    _with_fake(lambda: RS.run_arm(plan, master, hashes), _FakeRun())
+    assert not stale.exists(), "上一轮的缓存被当成了这份底本的输入"
+
+
+def test_a_batch_run_with_the_cache_is_not_comparable_to_one_without_it():
+    """「有」与「没有」是**两个值**，跨批次比较必须比得出来 —— 两个方向都算。"""
+    root = Path(tempfile.mkdtemp(prefix="weiran-cmp-"))
+    master = _master(root)
+    with_cache = RS.hash_master(master)
+    without = dict(with_cache)
+    without[RS.OPTIONAL_INPUTS[0]] = None
+    out_root = root / "runs"
+    out_root.mkdir(parents=True, exist_ok=True)
+    batch = out_root / "batch.json"
+
+    batch.write_text(json.dumps({"master": with_cache}, ensure_ascii=False),
+                     encoding="utf-8")
+    assert RS.OPTIONAL_INPUTS[0] in RS.check_against_previous_batch(
+        out_root, without), "这一批没有缓存、上一批有 —— 没报出来"
+    # 反例：同一份底本再跑一次，不该报「换过」（否则这条警报就是恒响的）
+    assert RS.check_against_previous_batch(out_root, with_cache) == ""
+
+    batch.write_text(json.dumps({"master": without}, ensure_ascii=False),
+                     encoding="utf-8")
+    assert RS.OPTIONAL_INPUTS[0] in RS.check_against_previous_batch(
+        out_root, with_cache), "这一批有缓存、上一批没有 —— 没报出来"
 
 
 # ---------------------------------------------------------------------------

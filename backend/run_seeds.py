@@ -13,6 +13,8 @@
      谁先跑谁占缓存。第二支臂于是有一半的归类直接命中缓存，两次运行差的不是
      seed。`_weiran_decay/run_ab2.py:9-12` 已经把这条纪律写下来了，本脚本
      把它从外部草稿搬进仓库，并变成**逐臂核对 sha256**。
+     （这份缓存是**可选**的：它不入库，底本没有它也照样跑 —— 见
+     `OPTIONAL_INPUTS`。所以这里防的是「有它在时被共享」，不是「必须有它」。）
   2. **臂之间口径不同还照样跑。** 12 agent 的臂与 27 agent 的臂混在一批里，
      而 12 agent 的相位读数是已知无效的（体量项跳动 75%）。
   3. **中途崩了还接着跑。** `simulate` **没有断点续跑**（每次先删库，JSON 只在
@@ -53,11 +55,22 @@ DEFAULT_MASTER = SHIPPED_OUT
 DEFAULT_ROOT = REPO_ROOT / "data" / "runs" / "seeds"
 DEFAULT_ROUNDS_FILE = SHIPPED_OUT / "twitter_rounds.json"
 
-#: 每支臂要用**自己那份**的三个输入。`simulate` 是从 `out_dir` 里读它们的
+#: 每支臂要用**自己那份**的输入。`simulate` 是从 `out_dir` 里读它们的
 #: （`simulate.py:1092` / `:1121` / `:1276`），所以「逐臂各拷一份」既不是
 #: 保险措施、也不是洁癖 —— 那是唯一能把输入钉住的办法。
-INPUT_FILES = ("twitter_profiles.csv", "actor_knowledge.json",
-               "stance_cache.json")
+#:
+#: **这三个的地位不一样，缺了会怎样也不一样。**
+REQUIRED_INPUTS = ("twitter_profiles.csv", "actor_knowledge.json")
+
+#: `stance_cache.json` 是**可选加速**：它不入库（`.gitignore:42`），删掉只是让
+#: 归类重跑一遍（花 LLM、也让两次运行的标签不再共享），**不会让推演跑不起来**。
+#: `repro_check._seed_run_dir()` 对同一件事就是这么办的（「有就复制、没有就算了」）。
+#: 所以底本没有它时本脚本**不拒绝** —— 只把它记成 `None`（「本次底本没有这份」），
+#: 因为把一份**不入库**的文件当必需件，等于让每个新 clone 都跑不起批次。
+OPTIONAL_INPUTS = ("stance_cache.json",)
+
+#: 用来遍历的那一份。**必需在前、可选在后**，顺序只影响打印。
+INPUT_FILES = REQUIRED_INPUTS + OPTIONAL_INPUTS
 
 #: 相位读数只在 27 agent 上有效（12 agent 实测体量项跳动 75%，十支臂里
 #: 7 支驱动峰假落在 P3）。所以小规模要显式开口子。
@@ -200,16 +213,34 @@ def plan_batch(seeds: list[int], out_root: Path, simulate_args: list[str],
 # ---------------------------------------------------------------------------
 
 def hash_master(master: Path) -> dict:
-    """底本三个输入的指纹。**缺一个就拒绝** —— 缺件不能靠「跳过它」继续。"""
+    """底本输入的指纹。**必需的那两个缺一个就拒绝**；可选那个缺了记成 `None`。
+
+    缺件不能靠「跳过它」继续 —— 那是对**必需**输入说的：少了画像或知情映射，
+    推演根本起不来，「臂之间输入同源」也就没有依据。
+
+    可选那个（`stance_cache.json`）反过来：它**本来就不入库**，所以「底本没有」
+    是**正常状态**，不是残缺。它按 `None` 记进指纹表，于是 ①「这次没有」与
+    「那次有」在 `check_against_previous_batch` 里**比得出来**（跨批次不可比时
+    照样会响），② 它不会被静默当成「三个都在」。
+    """
     out = {}
     for name in INPUT_FILES:
         p = master / name
         if not p.is_file():
+            if name in OPTIONAL_INPUTS:
+                out[name] = None
+                continue
             raise BatchRefused(
-                f"底本缺 {p} —— 一次批次要的正是这三个输入各拷一份。"
-                "缺了它，「臂之间输入同源」这句话就没有依据。")
+                f"底本缺 {p} —— 一次批次要的正是这两个必需输入各拷一份。"
+                "缺了它，「臂之间输入同源」这句话就没有依据。"
+                f"（{OPTIONAL_INPUTS[0]} 是另一回事：它不入库，没有也照样跑。）")
         out[name] = _sha256(p)
     return out
+
+
+def absent_optional(master_hashes: dict) -> list[str]:
+    """指纹表里那些「底本没有」的可选输入。**要打印给人看，不是内部状态。**"""
+    return [n for n in OPTIONAL_INPUTS if master_hashes.get(n) is None]
 
 
 def check_against_previous_batch(out_root: Path, master_hashes: dict) -> str:
@@ -296,13 +327,20 @@ def run_arm(plan: ArmPlan, master: Path, master_hashes: dict, *,
             timeout: float | None = None) -> dict:
     """跑一支臂。**输入先落地并逐份核对 sha256，再起进程。**
 
-    顺序不能反：先把三个输入拷进 `out_dir` 并核对，是为了让「这支臂用的是
+    顺序不能反：先把输入拷进 `out_dir` 并核对，是为了让「这支臂用的是
     哪份输入」在**它开跑之前**就已经定死。跑完再拷的话，中途改过的底本会
     被当成它当时的输入。
+
+    可选那个（`stance_cache.json`）在底本里没有时**不拷、也不核对** —— 但它
+    在 `out_dir` 里的**旧副本要被删掉**：那一份是上一轮的遗留，不是这份底本的
+    输入，留着就正好是这份脚本要防的那种「谁先跑谁占缓存」。
     """
     plan.out_dir.mkdir(parents=True, exist_ok=True)
     for name in INPUT_FILES:
         target = plan.out_dir / name
+        if master_hashes.get(name) is None:
+            target.unlink(missing_ok=True)
+            continue
         shutil.copy2(master / name, target)
         got = _sha256(target)
         if got != master_hashes[name]:
@@ -326,6 +364,9 @@ def run_arm(plan: ArmPlan, master: Path, master_hashes: dict, *,
         "command": plan.command(),
         "returncode": proc.returncode,
         "inputs": dict(master_hashes),
+        # 「底本没有哪一份可选输入」也记下来：`inputs` 里那个 `None` 单看像是
+        # 漏写，而它是**本次的实情**。汇总器按值比较，不受这个键影响。
+        "inputs_absent": absent_optional(master_hashes),
         "out_sha256": _sha256(rounds_path) if rounds_path.is_file() else None,
         "ok": proc.returncode == 0 and doc is not None,
         "stdout_tail": proc.stdout[-2000:] if proc.stdout else "",
@@ -480,7 +521,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"底本：{master}")
     for name in INPUT_FILES:
-        print(f"  {name}  {master_hashes[name][:12]}…")
+        got = master_hashes[name]
+        print(f"  {name}  {got[:12]}…" if got
+              else f"  {name}  **底本没有**（可选加速，见下）")
+    if absent := absent_optional(master_hashes):
+        print(f"  ⚠️ 底本没有 {'、'.join(absent)} —— **不拦**（它不入库，新 clone "
+              "本来就没有），但本批每支臂会各自归类：多花 LLM 调用，"
+              "而且与带缓存的那批**不可比**（`batch.json` 把「没有」也记成一个值，"
+              "换回来时会报「底本已经换过」）。要带上就先把那份文件放进底本目录。")
 
     if args.preflight:
         print()
