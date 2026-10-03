@@ -16,7 +16,7 @@
 > 该 agent 该轮动作整条丢；修法是让 shim 成为该 agent 时间戳的唯一权威）**；
 > **已把「哪些层是随机的」做成可机检的声明，并把多 seed 批次工具与离线汇总器
 > 备好（零成本的一半已落地，批次待跑）**；
-> 423 条测试全绿，六层可复现性自检通过）
+> 432 条测试全绿，六层可复现性自检通过）
 
 > **要把它跑起来，看 [`docs/使用手册.md`](docs/使用手册.md)。**
 > 那份手册负责「怎么跑、产出在哪、每个字段怎么读、哪些数不能按字面读」；
@@ -83,7 +83,7 @@ cp .env.example .env
 
 ```bash
 cd backend
-python -m pytest tests/             # 423 条，一次跑完（推荐）
+python -m pytest tests/             # 432 条，一次跑完（推荐）
 
 # 十六套测试也都能**不装 pytest** 直接跑（各自带兜底 runner）：
 python tests/test_store.py          # 14/14
@@ -92,15 +92,15 @@ python tests/test_llm.py            # 33/33
 python tests/test_stance.py         # 26/26
 python tests/test_perception.py     # 49/49
 python tests/test_brief.py          # 55/55
-python tests/test_gold_check.py     # 29/29
+python tests/test_gold_check.py     # 31/31
 python tests/test_selfcheck.py      # 8/8
 python tests/test_simulate.py       # 36/36
-python tests/test_config.py         # 12/12
+python tests/test_config.py         # 13/13
 python tests/test_repro_check.py    # 13/13
-python tests/test_viewer.py         # 21/21
+python tests/test_viewer.py         # 24/24
 python tests/test_stability.py      # 11/11
 python tests/test_stability_report.py  # 31/31
-python tests/test_run_seeds.py      # 34/34
+python tests/test_run_seeds.py      # 37/37
 python tests/test_handbook.py       # 28/28
 python -m weiran.scenario --reset
 python -m weiran.validate           # 世界状态引擎离线重放校验
@@ -152,7 +152,10 @@ python -m weiran.simulate --agents 3 --rounds 3     # 省钱冒烟（会压缩�
 > 正确做法是先造一个喂饱了的目录：
 >
 > ```bash
-> mkdir -p /tmp/abl && cp data/simulation/{twitter_profiles.csv,actor_knowledge.json,stance_cache.json} /tmp/abl/
+> mkdir -p /tmp/abl && cp data/simulation/{twitter_profiles.csv,actor_knowledge.json} /tmp/abl/
+> # 第三份 `stance_cache.json` 是**可选加速**、不入库：本地有就顺手带上
+> # （`cp data/simulation/stance_cache.json /tmp/abl/ 2>/dev/null || true`），
+> # 没有就直接跑 —— 推演会自己归类，只是多花 LLM 调用。
 > python -m weiran.simulate --agents 5 --rounds 15 --no-feedback --out /tmp/abl
 > python -m weiran.brief --rounds-file /tmp/abl/twitter_rounds.json
 > ```
@@ -266,17 +269,17 @@ backend/
     test_stance.py       26 条
     test_perception.py   49 条
     test_brief.py        55 条
-    test_gold_check.py   29 条
+    test_gold_check.py   31 条
     test_selfcheck.py     8 条
     test_simulate.py     36 条
-    test_config.py       12 条
+    test_config.py       13 条
     test_repro_check.py  13 条
-    test_viewer.py       21 条
+    test_viewer.py       24 条
     test_stability.py    11 条
     test_stability_report.py  31 条
-    test_run_seeds.py    34 条
+    test_run_seeds.py    37 条
     test_handbook.py     28 条
-    —— 共 423 条，`python -m pytest tests/` 一次跑完
+    —— 共 432 条，`python -m pytest tests/` 一次跑完
 data/
   simulation/                      推演产出（入库：是「跑得通」的证据）
     twitter_rounds.json            27 agent × 15 轮：逐轮状态、行为、成本、
