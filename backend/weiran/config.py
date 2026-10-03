@@ -262,6 +262,16 @@ def load_config(*, require_llm: bool = True, require_embedding: bool = False) ->
             "EMBEDDING_API_KEY 未设置，且 LLM_API_KEY 也为空 —— 二者至少填一个"
         )
 
+    # `LLM_BASE_URL` 和上面三项是同一类：没填就起不来。它原先在聚合检查**之后**
+    # 单独抛，于是它会晚一轮才露面 —— 先把模型名和密钥补齐、再跑一次，才轮到它。
+    # 那正是本函数承诺不做的「修一个报一个」，所以把它并进同一个 `missing`。
+    llm_base = os.environ.get("LLM_BASE_URL", "").strip()
+    if require_llm and not llm_base:
+        missing.append(
+            "LLM_BASE_URL 未设置 —— OpenAI 兼容端点的根地址，"
+            "形如 'https://api.deepseek.com/v1'（注意结尾的 /v1）"
+        )
+
     if missing:
         raise ConfigError(
             "配置不完整，缺少以下 "
@@ -290,13 +300,6 @@ def load_config(*, require_llm: bool = True, require_embedding: bool = False) ->
         if raw in ("0", "false", "no", "off"):
             return False
         raise ConfigError(f"{name} 必须是布尔值（1/0/true/false），当前值 {raw!r}")
-
-    llm_base = os.environ.get("LLM_BASE_URL", "").strip()
-    if require_llm and not llm_base:
-        raise ConfigError(
-            "LLM_BASE_URL 未设置 —— OpenAI 兼容端点的根地址，"
-            "形如 'https://api.deepseek.com/v1'（注意结尾的 /v1）"
-        )
 
     emb_base = os.environ.get("EMBEDDING_BASE_URL", "").strip() or llm_base
 

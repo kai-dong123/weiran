@@ -331,6 +331,42 @@ def test_loopback_check_is_an_exact_list_not_a_prefix():
         raise AssertionError(f"{bad!r} 不应被接受")
 
 
+# -- 缺件报错：**一次报全** ------------------------------------------------
+#
+# `load_config` 的文档承诺是「消息会一次性列出全部缺失项，避免『修一个报一个』
+# 的来回」。`LLM_MODEL_NAME` / `LLM_API_KEY` / `EMBEDDING_*` 确实都汇进了同一个
+# `missing` 列表，唯独 `LLM_BASE_URL` 原先在聚合检查**之后**单独抛 —— 于是它总
+# 比另外几项晚一轮露面：按报错把模型名和密钥补齐、再跑一次，才轮得到它。
+# 下面这条就是把「晚一轮」钉死的回归测试。
+
+def test_all_missing_items_are_reported_in_one_go():
+    """缺的配置必须在**同一次**报错里列全，包括基址。"""
+    with _env(
+        LLM_MODEL_NAME="",
+        LLM_API_KEY="",
+        LLM_BASE_URL="",
+        EMBEDDING_MODEL="",
+        EMBEDDING_API_KEY="",
+    ):
+        try:
+            load_config(require_llm=True, require_embedding=True)
+        except ConfigError as exc:
+            msg = str(exc)
+        else:
+            raise AssertionError("五项全空却通过了 —— 这等于根本没查")
+
+    for key in (
+        "LLM_MODEL_NAME",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "EMBEDDING_MODEL",
+        "EMBEDDING_API_KEY",
+    ):
+        assert key in msg, (
+            f"{key} 没出现在这一次报错里 —— 它会被推到下一轮才报，"
+            f"也就是「修一个报一个」：\n{msg}")
+
+
 # -- 简易 runner（与其余测试文件保持一致）----------------------------------
 
 def _run() -> int:
