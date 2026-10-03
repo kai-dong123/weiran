@@ -26,6 +26,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -59,6 +60,16 @@ def _sources() -> list[Path]:
 
 def _tree(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def _function_source(name: str) -> str:
+    """`viewer.py` 里某个函数的源码。按函数取、不按文件取 —— 同一个变量名
+    （`s`）在不同视图里指的是不同的 dict，整文件扫会张冠李戴。"""
+    src = (PKG / "viewer.py").read_text(encoding="utf-8")
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return ast.get_source_segment(src, node) or ""
+    raise AssertionError(f"`viewer.py` 里没有 {name} —— 这条检查点了名却找不到它。")
 
 
 def _imports(tree: ast.Module) -> list[tuple[str, bool]]:
@@ -328,6 +339,56 @@ def test_gold_page_reports_all_three_verdicts_and_the_not_a_score_line():
     assert "这不是分数" in page
     assert g["not_a_score"]["source"] in page, "没印出处"
     assert "不可采信" in page or "不能当证据" in page, "没说明「不采信」是什么意思"
+
+
+def test_every_summary_key_the_gold_page_reads_exists_in_the_artifact():
+    """金标页读的键，产物里必须**真的有**。
+
+    `summary.get("one_defect_note")` 就是这个反例：那个键在产物里从来没有
+    存在过（真正的键是 `interpretations`），于是渲染出一个空段落 —— 页面
+    看着完全正常，那句话一次都没上过页面。**读一个不存在的键不会报错**，
+    所以这里不盯某个固定的键名，而是把 `view_gold` 里读的键全捞出来，
+    一个个去产物里问。键改名、渲染挪走，这条都会红。
+    """
+    gold = json.loads(V.DEFAULT_GOLD.read_text(encoding="utf-8"))
+    keys = set(gold.get("summary") or {})
+    read = set(re.findall(r'\bs\.get\("([^"]+)"\)', _function_source("view_gold")))
+    assert len(read) >= 4, (
+        f"只从 `view_gold` 里认出 {len(read)} 个 `s.get(...)` —— 多半是那份 "
+        "summary 换了变量名。这条检查于是空转，得跟着改。")
+    missing = sorted(read - keys)
+    assert not missing, (
+        f"金标页在读产物里没有的键：{missing}。产物 `summary` 里有的是 "
+        f"{sorted(keys)} —— 读不存在的键不会报错，只会渲染出一个空段落。")
+
+
+def test_the_gold_page_carries_the_interpretations_from_the_artifact():
+    """「哪几条否决其实是同一件事」必须**真的上页面**。
+
+    这一节是把逐条判据读成一句话的唯一地方。所以不去核键名，而是**拿产物里的
+    正文去页面上找** —— 这一句话正是 `one_defect_note` 那件事丢掉的东西。
+    """
+    gold = json.loads(V.DEFAULT_GOLD.read_text(encoding="utf-8"))
+    items = [i for i in (gold.get("summary", {}).get("interpretations") or [])
+             if i.get("applies") is not False]
+    assert items, "产物里没有一条适用的解读 —— 这一条就失去要核的东西了"
+    page = _pages()["/gold"]
+    for it in items:
+        assert f'<code>{V._esc(it["id"])}</code>' in page, f"{it['id']} 没上页面"
+        assert V._esc(it["claim"]) in page, f"{it['id']} 的正文没上页面"
+
+
+def test_an_inapplicable_interpretation_says_why_instead_of_going_blank():
+    """`applies=False` 要印出「为什么不适用」，而不是留一段空白 ——
+    「不适用」是一个结论，不是「没内容」。"""
+    html = V._interpretations_html([
+        {"id": "x", "claim": "一句话", "requires": "某个前提",
+         "observed": {"AS-1": "通过"}, "applies": False,
+         "not_applicable_because": "这一页上没有这一条"}])
+    assert "不适用" in html and "这一页上没有这一条" in html
+    # 阴性对照：空表长不出东西来（否则「渲染了一节」这句话就没有依据）
+    assert V._interpretations_html([]) == ""
+    assert V._interpretations_html(None) == ""
 
 
 def test_degradations_get_a_warning_box():

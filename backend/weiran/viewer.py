@@ -669,6 +669,34 @@ def _railed_cell(hits) -> str:
                     for h in hits)
 
 
+def _interpretations_html(items) -> str:
+    """`summary.interpretations` —— **「哪几条否决其实是同一件事」**。
+
+    这一节不是装饰：它是把一行行的判据读成一句话的唯一地方（比如「AS-2 /
+    AS-3 / AS-4 / AS-8 四条否决指向同一条相位缺陷」）。少了它，读者会把**一条
+    根因数成四个独立问题**。
+
+    它此前读的是 `s.get("one_defect_note")` —— 那个键在 `gold_check.json` 的
+    `summary` 里**从来没有存在过**（真正的键是 `interpretations`）。于是它一直
+    渲染成一个空段落：页面看着完全正常，那句话一次都没上过页面。所以这里
+    逐条渲染**产物里真有的字段**，并且 `applies` 为假时把「为什么不适用」
+    一起印出来 —— 「不适用」是一个结论，不是「没内容」。
+    """
+    if not items:
+        return ""
+    out = ['<h3>怎么读这一页</h3>']
+    for it in items:
+        observed = "、".join(f"{k}={v}" for k, v in (it.get("observed") or {}).items())
+        out.append(f'<p><code>{_esc(it.get("id"))}</code> {_esc(it.get("claim"))}</p>')
+        out.append(f'<p class="note">前提：{_esc(it.get("requires"))}'
+                   + (f'；本页读数：{_esc(observed)}' if observed else "")
+                   + "</p>")
+        if it.get("applies") is False:
+            out.append('<p class="note">**本页上不适用**：'
+                       f'{_esc(it.get("not_applicable_because"))}</p>')
+    return "".join(out)
+
+
 def view_gold(d: Data) -> str:
     miss = _need(d, "gold")
     if miss:
@@ -696,7 +724,7 @@ def view_gold(d: Data) -> str:
         f'<p class="note">判得出来的 {_v(s.get("judged"))} 条里，只有 '
         f'{_esc(s.get("trusted_ids") or [])} 可采信 —— 其余的结果都不作数：'
         '不是「结果反了」，是「这个结果不能当证据」。</p>'
-        f'<p class="note">{_esc(s.get("one_defect_note") or "")}</p></section>',
+        + _interpretations_html(s.get("interpretations")) + '</section>',
 
         '<section><h2>逐条</h2><table><tr><th>断言</th><th>金标判据</th>'
         '<th>读数</th><th>结果</th><th>采信</th><th>贴界</th></tr>'
