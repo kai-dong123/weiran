@@ -14,12 +14,12 @@
 2. **Flask 是可选依赖，且只在这里被 import。** 延迟到 `build_app()` 里才
    import：没有它时 `import weiran.viewer` 仍然成功，只有真的起服务才报
    「装什么、怎么装」。核心运行时（`requests` / `numpy`）刻意保持轻，少一个
-   依赖就少一个「评委装不上」的失败点。`tests/test_viewer.py` 里有一条 AST
+   依赖就少一个「别人装不上」的失败点。`tests/test_viewer.py` 里有一条 AST
    检查守着「全仓只有这一个文件提到 flask」。
 
 3. **不引 CDN、不引前端构建步骤。** 图表是**服务端生成的内联 SVG**，页面里
    没有一行 JavaScript、没有一个外部请求。离线可跑是本项目的取向（`.env`
-   之外的网络请求都要能解释），一个要联网加载图表库的页面在评委的机器上
+   之外的网络请求都要能解释），一个要联网加载图表库的页面在别人的机器上
    可能是白屏。
 
 4. **「没记录」绝不显示成 0。** 老产出里没有 `cost.paths.direct`、没有
@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -78,6 +79,13 @@ TRIGGER_NOTE = (
 #: 三态配色。**同一个词在三处（表、摘要、逐条）必须同色** —— 颜色在这里是
 #: 判据结果的载体，不是装饰。
 VERDICT_CLASS = {"通过": "ok", "否决": "bad", "不可判定": "undecided"}
+
+#: 行内标记。产物里那些说明文字当初是按 markdown 写的（`gold_check.json` 与
+#: `brief.json` 里都有），页面既然不解析 markdown，就得在这儿落成标签 ——
+#: 否则页面上直接印着 `**` 和反引号。**只认这两种**，不做完整 markdown：
+#: 列表、链接、标题一律不认，多认一种就多一种在两个渲染器里解释不同的可能。
+_BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*", re.S)
+_CODE = re.compile(r"`([^`\n]+)`")
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +139,16 @@ def _v(value, *, unit: str = "") -> str:
     return f"{value}{unit}"
 
 
+def _signed(value) -> str:
+    """差值的写法：**带符号**（`+0.0025`），与决策简报 `brief.md` 同一格式。
+
+    差值不能走 `_v()`：`_v` 是「值 → 字」的出口，不带符号；而差值为正为负
+    是这一列的全部信息，少了那个符号，「涨了 0.0003」和「跌了 0.0003」在
+    页面上长得一样。`None` 仍然照本层的规矩写「—」。
+    """
+    return "—" if value is None else f"{value:+.4f}"
+
+
 def _txt(value) -> str:
     """纯文本的同一个出口（用于 SVG 里的标签，那里不能放 HTML）。"""
     if value is None:
@@ -139,7 +157,16 @@ def _txt(value) -> str:
 
 
 def _esc(s) -> str:
-    return html.escape(str(s), quote=True)
+    """**文本 → 页面上的 HTML。凡是产物里的文字都从这里过。**
+
+    顺序是「先转义、再换标签」，不能反：先换标签就会把刚生成的
+    `<strong>` 连同数据里的真标签一起转义掉。转义在前，数据里的
+    `<script>` 就永远只是字面文本，而两处替换只认 `**` 与反引号 ——
+    这两个字符都不在 `html.escape` 的靶子里，所以转义不影响它们。
+    """
+    out = html.escape(str(s), quote=True)
+    out = _BOLD.sub(r"<strong>\1</strong>", out)
+    return _CODE.sub(r"<code>\1</code>", out)
 
 
 def _pct(part, whole) -> str:
@@ -277,6 +304,9 @@ th, td { border: 1px solid #e2e8f0; padding: 5px 8px; text-align: left;
          vertical-align: top; }
 th { background: #edf2f7; font-weight: 600; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* 列名断行会把「配对实际」拆成「配对实/际」—— 表头不许断。只给需要的列加，
+   不写进 th.num：逐轮页有 14 列，那一页本来就贴着视口宽度。 */
+th.nw, td.nw { white-space: nowrap; }
 .chart { width: 100%; height: auto; }
 .chart .grid { stroke: #e2e8f0; stroke-width: 1; }
 .chart .tick { font-size: 9px; fill: #718096; }
@@ -403,7 +433,7 @@ def view_index(d: Data) -> str:
         f'<tr><td>规模</td><td>{_v(m.get("agents"))} agent × {_v(m.get("rounds"))} 轮</td></tr>'
         f'<tr><td>是否压缩模式</td><td>{_v(m.get("compressed"))}'
         + ('' if m.get("compressed") else
-           '（轮 = 天，与金标 `phases[].day` 逐位对齐）') + '</td></tr>'
+           '（轮 = 天，与金标 <code>phases[].day</code> 逐位对齐）') + '</td></tr>'
         f'<tr><td>总动作数</td><td>{_v(m.get("total_actions"))}</td></tr>'
         f'<tr><td>总耗时</td><td>{_v(m.get("total_seconds"), unit="s")}</td></tr>'
         f'<tr><td>上下文截断</td><td>{_v(m.get("truncations"))} 次</td></tr>'
@@ -424,7 +454,7 @@ def view_index(d: Data) -> str:
     row = ev.get("leanest") or {}
     body.append(
         '<section><h2>证据量</h2>'
-        '<p class="note">每轮六维状态是由**几条行为**算出来的 —— 这一栏此前不在'
+        '<p class="note">每轮六维状态是由<strong>几条行为</strong>算出来的 —— 这一栏此前不在'
         '产出里，于是「27 个 agent 吵了 50 条」与「3 个 agent 说了 3 句话」在'
         '文件里长得一模一样。</p>'
         '<table><tr><th>项</th><th class="num">值</th></tr>'
@@ -513,8 +543,8 @@ def view_curves(d: Data) -> str:
     body = [
         '<section><h2>六维 15 轮</h2>'
         f'<p class="note">横轴是 0 基轮号（R0~R{len(rows) - 1}），标出阶段标签的'
-        '那几轮就是金标 `phases[].day` 的落点。红底纹是**贴界轮**：'
-        '值恰好等于 0.0000 / 1.0000，那是 `_clamp(·, 0, 1)` 的边界产物，'
+        '那几轮就是金标 <code>phases[].day</code> 的落点。红底纹是<strong>贴界轮</strong>：'
+        '值恰好等于 0.0000 / 1.0000，那是 <code>_clamp(·, 0, 1)</code> 的边界产物，'
         '不是读数。</p>'
         f'<div class="grid6">{"".join(cells)}</div></section>',
         '<section><h2>逐轮原值</h2><table><tr><th>轮</th><th>阶段</th>'
@@ -549,7 +579,7 @@ def view_rounds(d: Data) -> str:
 
     body = [
         '<section><h2>行为构成</h2>'
-        '<p class="note">柱高是**行为条数**（也就是喂进引擎的那个列表的长度），'
+        '<p class="note">柱高是<strong>行为条数</strong>（也就是喂进引擎的那个列表的长度），'
         '按行为类别分色。条数之外还要看人数：本条产出里在场人数全程恒定，'
         '而发声人数从 '
         f'{_v((b.get("evidence") or {}).get("presence", {}).get("speakers_first"))} 掉到 '
@@ -595,13 +625,16 @@ def view_windows(d: Data) -> str:
     scale = b.get("intervention_scale")
     body = [
         '<section><h2>决策窗口</h2>'
-        '<p class="note">每个窗口给的是：当时的问题、实际选择、以及**在同一个'
-        '分叉点上换一种处置**之后的信任终值。注意分支是**离线**算的 —— '
+        '<p class="note">每个窗口给的是：当时的问题、实际选择、以及<strong>在同一个'
+        '分叉点上换一种处置</strong>之后的信任终值。注意分支是<strong>离线</strong>算的 —— '
         '「后续行为不变」，所以它不是一次真正的反事实重跑，'
-        'agent 的反应并没有跟着变。</p>'
-        f'<table><tr><th>阶段</th><th>第几天</th><th>当时的问题</th><th>实际选择</th>'
-        f'<th class="num">实际路径信任</th><th class="num">干预分支信任</th>'
-        f'<th class="num">差值</th><th>说明</th></tr>'
+        'agent 的反应并没有跟着变。列名与决策简报 §一 对齐：'
+        '「B 机制版」只有转折那个窗口有，其余窗口不涉及劝删，<strong>不设</strong>机制版 —— '
+        '那一格写「—」，不是 0。</p>'
+        f'<table><tr><th>阶段</th><th class="nw">第几天</th><th>当时的问题</th><th>实际选择</th>'
+        f'<th class="num nw">配对实际</th><th class="num nw">A 激励版</th>'
+        f'<th class="num nw">Δ(A−实际)</th><th class="num nw">B 机制版</th>'
+        f'<th>说明</th></tr>'
         + "".join(
             f'<tr><td>{_esc(r.get("phase") or "—")}'
             f'{"（拐点）" if r.get("is_turning_point") else ""}</td>'
@@ -612,11 +645,17 @@ def view_windows(d: Data) -> str:
             f'<td>{_esc(r.get("actual_choice") or "—")}</td>'
             f'<td class="num">{_v(r.get("actual_from_fork"))}</td>'
             f'<td class="num">{_v(r.get("branch_a"))}</td>'
-            f'<td class="num">{_v(r.get("delta_a"))}</td>'
-            f'<td class="note">{_esc(r.get("note") or "")}</td></tr>'
+            f'<td class="num nw">{_signed(r.get("delta_a"))}</td>'
+            # B 机制版**不走 `_v()`**：它的 None 是「本窗口不设这条分支」，
+            # 不是一个没记下来的读数。走 `_v()` 会印成「未记录」，那正是
+            # 这一层从头到尾在防的那种混淆 —— 把「设计上不存在」说成「漏了」。
+            f'<td class="num nw">{_v(r.get("branch_b")) if r.get("branch_b") is not None else "—"}'
+            + (f' <span class="note">Δ {_signed(r.get("delta_b"))}</span>'
+               if r.get("delta_b") is not None else "") + '</td>'
+            f'<td class="note">{_esc(r.get("note") or "—")}</td></tr>'
             for r in rows)
         + '</table>'
-        f'<p class="note">干预倍数 `intervention_scale = {_v(scale)}`'
+        f'<p class="note">干预倍数 <code>intervention_scale = {_v(scale)}</code>'
         '（沿用离线校验的约定值，不是本次调出来的）。</p></section>',
         '<section><h2>拐点信号</h2>'
         + _turning_point_html(b) + '</section>',
@@ -686,7 +725,7 @@ def _interpretations_html(items) -> str:
                    + (f'；本页读数：{_esc(observed)}' if observed else "")
                    + "</p>")
         if it.get("applies") is False:
-            out.append('<p class="note">**本页上不适用**：'
+            out.append('<p class="note"><strong>本页上不适用</strong>：'
                        f'{_esc(it.get("not_applicable_because"))}</p>')
     return "".join(out)
 
@@ -854,6 +893,29 @@ def _check(data: Data) -> int:
         bad += 0 if good else 1
         print(f"  {'✅' if good else '❌'} {path:<10} {len(body):>7} 字符"
               + ("（缺产物，页面显示「显示不了」）" if blank else ""))
+    # 字面 markdown 标记不许上页面：产物里的说明文字是按 markdown 写的
+    # （`gold_check.json` 与 `brief.json` 都有），页面不解析它，`**粗体**`
+    # 就会原样印出来 —— 页面上看着像排版事故。这里盯的是**渲染结果**，
+    # 所以模板里漏改一处、产物里新写一处，都会红。
+    dirty = {p: (b.count("**"), b.count("`"))
+             for p, b in pages.items() if "**" in b or "`" in b}
+    if dirty:
+        print(f"  ❌ 这些页面上印着字面标记（** / 反引号）：{dirty}")
+        bad += 1
+    else:
+        print(f"  ✅ {len(pages)} 个页面上没有字面的 ** 或反引号")
+    # 窗口表里的每条分支都要**真的印上去**。读数在产物里、页面上少一列，
+    # 从页面上看不出来 —— 这一条盯的正是「少一列」。
+    wins = ((data.brief or {}).get("windows") or [])
+    dropped = []
+    for w in wins:
+        for key in ("actual_from_fork", "branch_a", "branch_b"):
+            val = w.get(key)
+            if val is not None and f"{val:.4f}" not in pages["/windows"]:
+                dropped.append((w.get("phase"), key))
+    if dropped:
+        print(f"  ❌ 这些窗口读数没上页面：{dropped}")
+        bad += 1
     # 未记录必须**以「未记录」出现**，不能变成一个编出来的 0。
     if "未记录" not in pages["/rounds"]:
         print("  ❌ 逐轮页里一处「未记录」都没有 —— 缓存字段本该未记录；"

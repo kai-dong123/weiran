@@ -10,7 +10,7 @@
      挂上了 flask —— 而这件事在装了 flask 的开发机上看不出来。
   3. **只读变成可写。** 这一层的性质是「只读」：不起推演、不写文件。代码里
      一个 `write_text` 或一个 `requests.post` 就会让这句话变成假的。
-  4. **页面联网。** 一个 CDN 引用在开发机上永远看不出问题（有网），在评委
+  4. **页面联网。** 一个 CDN 引用在开发机上永远看不出问题（有网），在别人
      机器上可能是白屏。
   5. **页面与产物对不上。** 页面上的数必须是产物里的数，不能是渲染时算出来
      的另一个数。
@@ -442,6 +442,67 @@ def test_text_is_escaped():
         page = V.render_all(d)["/windows"]
     assert "<script>alert(1)</script>" not in page, "没转义，脚本原样进了页面"
     assert "&lt;script&gt;" in page and "&amp;" in page
+
+
+def test_escaping_happens_before_the_inline_markup():
+    """**顺序**：先转义、再换标签。反过来就会把真标签也转义掉。
+
+    产物里带 `<` 的文字是常有的（场景描述里就有），而说明文字是按 markdown
+    写的。两件事挤在同一个出口上，顺序就是全部：先换标签的话，数据里的
+    `<script>` 会活下来；先转义、后换标签，两处替换只认 `**` 和反引号，
+    它俩都不在 `html.escape` 的靶子里，谁都不受影响。
+    """
+    brief = json.loads(V.DEFAULT_BRIEF.read_text(encoding="utf-8"))
+    brief["windows"][0]["question"] = '<b>粗</b> **真的粗体** `代码`'
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "brief.json"
+        p.write_text(json.dumps(brief, ensure_ascii=False), encoding="utf-8")
+        page = V.render_all(V.Data(p, V.DEFAULT_ROUNDS_FILE, V.DEFAULT_GOLD))["/windows"]
+    assert "<b>粗</b>" not in page, "数据里的标签没被转义"
+    assert "&lt;b&gt;粗&lt;/b&gt;" in page
+    assert "<strong>真的粗体</strong>" in page, "** 没落成 strong"
+    assert "<code>代码</code>" in page, "反引号没落成 code"
+
+
+def test_no_page_prints_literal_markdown_markers():
+    """五个页面上都不许有字面的 `**` 或反引号。
+
+    产物里的说明文字（`gold_check.json` 与 `brief.json`）是按 markdown 写的，
+    页面不解析它就等于把排版语法印给了读者 —— 在 `/gold` 上曾经有 32 处
+    `**`，一份 clone 下来自己跑就能看见。这里盯的是**渲染结果**，所以
+    产物里新写一处、模板里漏改一处，都会红。
+    """
+    for path, page in _pages().items():
+        assert "**" not in page, f"{path} 上印着字面 ** "
+        assert "`" not in page, f"{path} 上印着字面反引号"
+
+
+def test_the_window_table_prints_the_mechanism_branch():
+    """转折窗口的机制版读数要上页面，其余窗口写「—」而**不是「未记录」**。
+
+    `branch_b` 的 `None` 是「本窗口不设这条分支」（设计上不存在），不是
+    「漏记了」。这一格走 `_v()` 就会印成「未记录」，把设计说成疏忽 ——
+    这一层从头到尾防的就是这种混淆，所以这里连措辞一起钉住。
+    """
+    b = json.loads(V.DEFAULT_BRIEF.read_text(encoding="utf-8"))
+    win = _pages()["/windows"]
+    with_b = [w for w in b["windows"] if w.get("branch_b") is not None]
+    assert with_b, "产物里一条机制版分支都没有 —— 这条测试就没在测东西"
+    for w in with_b:
+        assert f"{w['branch_b']:.4f}" in win, f"{w['phase']} 的机制版读数没上页面"
+    for w in b["windows"]:
+        if w.get("branch_b") is None:
+            assert "未记录" not in _row_of(win, w["phase"]), \
+                f"{w['phase']} 把「不设机制版」印成了「未记录」"
+
+
+def _row_of(page: str, phase: str) -> str:
+    """从页面里切出某个阶段那一行 `<tr>…</tr>` —— 表是逐行拼的。"""
+    for row in page.split("<tr>")[1:]:
+        body = row.split("</tr>", 1)[0]
+        if phase in body:
+            return body
+    raise AssertionError(f"页面上没有 {phase} 这一行")
 
 
 # ---------------------------------------------------------------------------

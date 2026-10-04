@@ -19,7 +19,16 @@ dist/
 .vite/
 
 # ---- 运行时产物（可重建，不入库）----
-data/runs/
+data/runs/*
+# 例外：三支跨 seed 稳定性臂的**产出与清单**要入库。它们是技术报告里
+# 「稳定性」那一组读数的全部输入，不入库那组读数就成了「只有我们算得出来」
+# 的数 —— 而本作品把「可复核」当及格线。汇总器只读各臂的 `arm.json` 与
+# `twitter_rounds.json`，所以各臂自己复制的底本输入（画像 / 知情映射 /
+# 归类缓存）与 OASIS 的 .db 仍然不入库。
+!data/runs/seeds/
+data/runs/seeds/*/twitter_profiles.csv
+data/runs/seeds/*/actor_knowledge.json
+data/runs/seeds/*/stance_cache.json
 data/*.db
 *.log
 

@@ -1,0 +1,27 @@
+{
+  "master": {
+    "twitter_profiles.csv": "9681970c3f39df27bed5bd06a64637b145d6239b435740a7758c7109fd561cb7",
+    "actor_knowledge.json": "33ef56fc66908c46398c31a124b2560a9a66d4004f09a0313d107f84026d5a17",
+    "stance_cache.json": "783bb4a338b171d87326ef74aa838255e7232298aa3f6fa092858ec1a68a1cd3"
+  },
+  "master_dir": "data/simulation",
+  "arms": [
+    "seed11",
+    "seed22",
+    "seed33"
+  ],
+  "options": {
+    "agents": 27,
+    "rounds": 15,
+    "chunking_guard": false,
+    "events_from": "phases",
+    "platform": "twitter",
+    "scenario": "benchmark/scenarios/employment_trust_crisis",
+    "temperature": 0.7,
+    "no_world_state": false,
+    "no_phases": false,
+    "no_knowledge": false,
+    "no_feedback": false
+  },
+  "command": "python backend/run_seeds.py --seeds 11,22,33 --agents 27 --rounds 15 --temperature 0.7 --out data/runs/seeds --yes"
+}

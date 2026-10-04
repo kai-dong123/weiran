@@ -53,7 +53,7 @@
 变成了不去做确定性的借口。这一层还顺带比对落盘样例是否与当前代码一致，
 防的是「模板改了、样例没重跑」。
 
-第 2.6 层同理由，多一条：**金标对照表的结论必须能被评委自己跑出来**。
+第 2.6 层同理由，多一条：**金标对照表的结论必须能被复核者自己跑出来**。
 那张表里有五条否决、其中四条同源，正是靠这一层才成为可核对的结论而不是一句表态。
 
 第 2.7 层（`weiran.selfcheck`）问的是这些层都问不到的一件事：**上面每一层都是
@@ -178,40 +178,17 @@ def _seed_run_dir(src: Path, dst: Path) -> list[str]:
 def child_env() -> dict:
     """让子进程按 UTF-8 说话 —— 否则父进程解不出它的话。
 
-    **这是这个文件翻的第三次车，而且是最隐蔽的一次：它把第 3 层藏起来了。**
-    上面（`_run_sim`）一直写的是 `capture_output=True, text=True,
-    encoding="utf-8"`。三个参数都真、都合理，而子进程在 Windows 中文机器上
-    被重定向到管道时，stdout 的编码是**本机 locale（cp936/GBK）**，
-    不是 UTF-8 —— `weiran/config.py:ensure_console_encoding()` 只改
-    `errors` 策略、**故意不动 encoding**（它要的是中文照原样显示，不是改成
-    UTF-8）。于是父进程拿 UTF-8 去解 GBK 字节，实测：
+    **定义已移到 `weiran/config.py`（与 `ensure_console_encoding()` 放在一起，
+    那是同一件事的另一半）。** 上面那段复盘仍然是这个文件的：它翻的第三次车、
+    以及它为什么最隐蔽。但修法不该只留在这里 —— `run_seeds.py` 起子进程的那
+    一处需要同一个契约，而它自己另写了一遍，**那一份没跟上**：入库的臂清单里
+    2 KB 中文日志尾巴被解成了 630 个 `U+FFFD`。同一个契约两份实现，跟进修的
+    正好是不入库的那一份。
 
-        python repro_check.py
-        UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd0 in position 2
-
-    错在父进程读不动，可它炸出来的样子是另一回事：解码发生在
-    `subprocess` 的**读取线程**里，那个异常不会让 `run()` 抛出去，只会让
-    `proc.stdout` 变成 `None`，然后这里下一行的 `proc.stdout.splitlines()`
-    报 `AttributeError: 'NoneType' object has no attribute 'splitlines'`
-    —— **指向一个跟真正原因毫无关系的对象**。第 3 层就这样整层停摆，
-    而它停摆的方式是「抛异常」，不是「报一个错的数」，所以只看输出像是
-    「推演本身跑不起来」，于是会去查推演。
-
-    修法也**不动父进程的 decode**：父进程要读的 `"完成：…"` 是中文，
-    拿 `errors="replace"` 兜住会把中文换成问号、那行就永远找不到了
-    （那就从「崩掉」退化成「静默少一行」，比崩掉更坏）。正解是让子进程
-    真的说 UTF-8：`PYTHONIOENCODING` 是 Python 自己认的开关，
-    对推演行为**零影响**（只换输出编码），所以拿它对齐不引入任何混淆变量。
-
-    教训的形状跟前两次**是同一个**：这个文件坏掉的方式，总是「测试全绿、
-    而工具已经废了」。前两次是 argv 长得对、跑不通；这一次是参数写得对、
-    字节解不开。所以配的检查（`test_repro_check.py::test_child_env_…`）
-    不是断言这个字典长什么样，而是**真的起一个子进程说一句中文、父进程
-    按 `_run_sim` 的读法把它读回来** —— 恒真检查防不住这一类。
+    这里保留这个名字，是因为 `_run_sim()` 与 `test_repro_check.py` 按它用。
     """
-    env = dict(os.environ)
-    env["PYTHONIOENCODING"] = "utf-8"
-    return env
+    from weiran.config import child_env as impl
+    return impl()
 
 
 def _run_sim(rounds: int, agents: int, out_dir: Path) -> tuple[dict, str]:
@@ -333,7 +310,7 @@ def check_brief() -> bool | None:
 def check_gold_check() -> bool | None:
     """第 2.6 层：金标对照表 —— 同一份产出 → 同一张表。
 
-    这一层与第 2.5 层同规格，但**多守一件事**：那张表的结论要能被评委
+    这一层与第 2.5 层同规格，但**多守一件事**：那张表的结论要能被复核者
     自己跑出来。所以这里比对的不只是「两次跑一样」，还包括**落盘的那份
     与当前代码一致** —— 否决算不算数，取决于这张表是不是算出来的。
 
@@ -509,7 +486,7 @@ def check_end_to_end(rounds: int, agents: int, workdir: Path) -> bool:
               "\n     于是喂给引擎的行为序列不同。缓存只能保证「同一句话给同一标签」。")
         print(f"     第一次行为标签: {[r['behaviors'] for r in a]}")
         print(f"     第二次行为标签: {[r['behaviors'] for r in b]}")
-        print("     正式口径应为「多 seed 跑 N 次，报均值与方差」，见 进度.md 第 5 步。")
+        print("     正式口径应为「多 seed 跑 N 次，报均值与方差」，见 进度.md 2026-09-15「多 seed 稳定性」条目。")
     return ok
 
 

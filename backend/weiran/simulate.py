@@ -45,6 +45,7 @@ from .config import (
     ConfigError,
     ensure_log_handler_encoding,
     load_config,
+    rel_path,
 )
 from .llm import Ledger, LLMClient, parse_cache
 from .perception import (
@@ -667,7 +668,7 @@ def build_model(
     #
     # 另外：`seed` 只被服务端「尽力」遵守，OpenAI 兼容端点不保证逐位可复现。
     # 所以正式的可复现性方案仍然是「多 seed 跑 3 次报均值与方差」，
-    # 见 进度.md 第 5 步，而不是指望 seed 一劳永逸。
+    # 见 进度.md 2026-09-15「多 seed 稳定性」条目，而不是指望 seed 一劳永逸。
     if temperature is not None:
         cfg["temperature"] = temperature
     if seed is not None:
@@ -1764,7 +1765,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     if result.stance_summary:
         print(f"归类：{result.stance_summary}")
-    print(f"逐轮动作 → {out_file}")
+    print(f"逐轮动作 → {rel_path(out_file)}")
 
     if args.inspect_db and result.db_path:
         print("\n" + "=" * 70)

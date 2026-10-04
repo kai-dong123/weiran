@@ -10,12 +10,66 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 # backend/weiran/config.py -> backend/weiran -> backend -> <repo root>
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def rel_path(path) -> str:
+    """相对仓库根的路径（正斜杠）；不在仓库内则原样返回。
+
+    凡是要**写进产物或清单**的路径都用它：绝对路径把「本机目录」焊进了
+    入库的东西，换台机器、或仓库换个位置，那份记录就和产生它的那次运行
+    对不上 —— 而它们的全部意义就是「我看到的和它说的是同一件事」。
+
+    **只此一处定义。** 原先 `brief.py` 自己有一份，而 `simulate` 的落盘
+    提示、`run_seeds` 的臂清单、`stability_report` 的来源段另有三处要写
+    路径；各写一份必然漂移，且漂移了没有任何地方会报错。
+    """
+    try:
+        return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
+#: 文本里的路径**长什么样**：盘符 + 分隔符，或两种 POSIX 家目录。
+_PATH_TOKEN = re.compile(r"[A-Za-z]:[\\/][^\s\"'`|<>]*|/(?:mnt|home)/[^\s\"'`|<>]*")
+
+#: 路径后面跟着的成对/句读符号，切掉再判：正文里的路径常写在「」里或以「，」结尾。
+_TRAILING = "，。；：、）」』】》”’,;:)]}>\"'`."
+
+
+def absolute_repo_paths(text: str) -> list[str]:
+    """文本里**以绝对形式写出的、本仓库内**的路径。**只做否证用。**
+
+    与 `rel_path` 是一件事的两半，所以放在一起：那个负责**写的时候**写成仓库
+    相对，这个负责**写完之后**能自己查出来。少了这一半，`rel_path` 就只在
+    **调用它的地方**生效 —— 漏掉一处不会有任何报错。这不是假设：
+    `stability_report` 的臂目录就是漏掉的那一处，一份已经写好的汇总里带着
+    `D:\\…\\weiran\\data\\runs\\seeds\\seed11`，而它自己的三条口径检查一条都没
+    提这件事。**能查出来的东西不要靠记得。**
+
+    **边界写在名字里：只管本仓库内。** 仓库外的路径（测试用的临时目录、
+    别人机器上的家目录）不归这条规矩管 —— `rel_path` 对它们本来就原样返回，
+    它们也没有等价的「仓库相对」写法。要抓的是「**我们的**东西被写成了绝对
+    形式」，那是换台机器就对不上的那种记录。
+    """
+    hits = []
+    for raw in _PATH_TOKEN.findall(text):
+        token = raw.rstrip(_TRAILING)
+        if not token:
+            continue
+        try:
+            if Path(token).resolve().is_relative_to(REPO_ROOT):
+                hits.append(token)
+        except (OSError, ValueError):
+            continue
+    return hits
+
 
 # 场景库的默认位置。**只此一处定义。**
 # 原先 `Config.db_path` 与 `scenario.py` 各算一次同一个路径，两者会悄悄漂移
@@ -37,7 +91,7 @@ def ensure_console_encoding() -> None:
         UnicodeEncodeError: 'gbk' codec can't encode character '\\u26a0'
 
     脚本**整个失败**，连断言统计都走不到 —— 而 README 把这条命令写成验证步骤，
-    评委只要重定向输出（或走 CI、或 `| tee`）就会撞上。这类项目最常见的失败
+    只要重定向输出（或走 CI、或 `| tee`）就会撞上。这类项目最常见的失败
     不是算法错，而是「跑到一半停下来」。
 
     修法只动 errors 策略、**不动 encoding**：中文仍按控制台原本的编码正确显示，
@@ -49,6 +103,41 @@ def ensure_console_encoding() -> None:
             stream.reconfigure(errors="replace")
         except (AttributeError, ValueError, OSError):
             pass  # 不是 TextIOWrapper（测试里的 StringIO、已关闭的流等）
+
+
+def child_env() -> dict:
+    """起子进程时套上这个 env —— **让子进程按 UTF-8 说话**。
+
+    与上面 `ensure_console_encoding()` 是同一件事的两半，所以放在一起：那一半
+    管「本进程输出时别因为编码装不下符号而崩」，这一半管「父进程按什么编码去读
+    子进程的话」。**两半必须对齐**，否则字节在管道里对不上。
+
+    对不上会怎样，这个项目踩过两次，两种表现都留在这里：
+
+    1. **崩掉**（`repro_check.py` 第三次翻车）：父进程写的是
+       `subprocess.run(..., text=True, encoding="utf-8")`，而子进程被重定向到
+       管道时按本机 locale（Windows 中文 = cp936/GBK）输出。解码发生在
+       `subprocess` 的**读取线程**里，那个异常不让 `run()` 抛，只让
+       `proc.stdout` 变成 `None`，最后报成 `'NoneType' object has no attribute
+       'splitlines'` —— 指向一个跟真正原因毫无关系的对象。
+    2. **不崩，但记录被毁**（`run_seeds.py` 的臂清单，2026-10-04 入库前发现）：
+       那一处多写了 `errors="replace"`，于是异常没了、中文被逐个换成 `U+FFFD`
+       —— 实测三支臂的 2 KB 日志尾巴里各有 **630 处**替换符，中文不可还原。
+       「跑得动」把「这份记录已经废了」盖住了。
+
+    修法**不动父进程的解码**：父进程要读的中文，用 `errors="replace"` 兜住就
+    永远读不回来了（从「崩掉」退化成「静默少一行」，比崩掉更坏）。正解是让子
+    进程真的说 UTF-8 —— `PYTHONIOENCODING` 是 Python 自己认的开关，对推演行为
+    **零影响**（只换输出编码），拿它对齐不引入任何混淆变量。
+
+    **只此一处定义。** 原先只有 `repro_check.py` 自己有一份（它第三次翻车的
+    修法），而 `run_seeds.py` 起子进程处另写了一遍 `encoding="utf-8"` 却没有这
+    个 env —— 同一个契约两份实现，跟上修的正好是不入库的那一份。与 `rel_path`
+    是同一个病：**同一件事抄两份，必然有一份没跟着修。**
+    """
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
 
 
 def ensure_log_handler_encoding() -> int:

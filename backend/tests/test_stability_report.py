@@ -552,6 +552,41 @@ def test_check_stability_accepts_the_real_output():
     assert SR.check_stability(doc, SR.render_markdown(doc)) == []
 
 
+def test_a_repo_path_written_absolutely_is_rejected():
+    """**本仓库内的路径不许以绝对形式写进产物。**
+
+    这条守的缺陷在 2026-10-04 真的发生过：入库前的 `stability.json` 里
+    `arm_dirs` 写的是 `D:\\…\\weiran\\data\\runs\\seeds\\seed11`，而这份产物
+    已有的三条口径检查一条都没提它 —— 前三条守的是「别把读数读成另一个
+    意思」，没有一条守「别把本机焊进入库的东西」。
+
+    两个方向都要量：**塞进正文**要被抓到，**塞进结构化产物**也要被抓到
+    （`check_stability` 在这之前从来没看过 `doc`）。
+    """
+    doc = _build(_three_arms())
+    md = SR.render_markdown(doc)
+    assert SR.check_stability(doc, md) == [], "改了之后夹具自己先不过了"
+
+    repo = str(REPO_ROOT)
+    # ① 只在正文里出现
+    hit = SR.check_stability(doc, md + f"\n臂目录：`{repo}/data/runs/seeds`\n")
+    assert any("data/runs/seeds" in p for p in hit), hit
+    # ② **只在结构化产物里**出现：塞一个不会被渲染进正文的键，于是这条只有
+    #    看过 `doc` 才可能报 —— 加第 ③ 条之前，`check_stability` 从没看过 `doc`。
+    doc2 = _build(_three_arms())
+    assert f"{repo}\\data\\runs" not in SR.render_markdown(doc2), "夹具变了"
+    doc2["_provenance"]["note"] = f"{repo}\\data\\runs\\seeds"
+    hit2 = SR.check_stability(doc2, SR.render_markdown(doc2))
+    # 报出来的那条里带着路径 —— 注意它是从 `json.dumps` 的文本里抠出来的，
+    # 所以分隔符是转义过的双反斜杠；这里只认路径的末两段，不认分隔符写法。
+    assert len(hit2) == 1 and "data" in hit2[0] and "seeds" in hit2[0], hit2
+    # ③ 反向：仓库**外**的路径不归这条管（临时目录、别人机器上的家目录），
+    #    否则测试与开发时的临时批次会被这条规矩误伤。
+    outside = SR.check_stability(
+        doc, md + "\n临时目录：`/tmp/weiran-arms/seed11` 与 `C:\\Users\\x\\t`\n")
+    assert outside == [], outside
+
+
 def test_railed_dimensions_are_flagged_but_not_judged():
     """贴过界的维度上跨臂离散是假的（夹逼把它压小了）—— **只标不判**。"""
     doc = _build(_three_arms())

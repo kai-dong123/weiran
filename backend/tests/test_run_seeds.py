@@ -67,12 +67,34 @@ class _FakeRun:
     """`subprocess.run` 的替身。**不联网、不起真进程。**
 
     `fail_on` 指定第几次调用返回非零 —— 用来测「失败就停下」。
+
+    `said` 非空时，替身**按真子进程的规矩说话**（见 `_stdout_as_the_child_
+    would_say_it`），用来测「父进程读不读得回来」。默认那个 `"ok"` 是不出声
+    的替身 —— 它永远读得动，所以它测不了编码。
     """
 
-    def __init__(self, *, fail_on: int | None = None, write_artifact=True):
+    #: 真子进程被重定向到管道时用**本机 locale** 说话；Windows 中文机器上是
+    #: cp936。这里写死而不是取 `locale.getpreferredencoding()`：这条缺陷只在
+    #: 中文 Windows 上出现，取真 locale 会让这条测试在 UTF-8 的机器上（CI、
+    #: Linux）退化成一个恒真检查。
+    LOCALE = "cp936"
+
+    def __init__(self, *, fail_on: int | None = None, write_artifact=True,
+                 said: str | None = None):
         self.calls: list[list[str]] = []
         self.fail_on = fail_on
         self.write_artifact = write_artifact
+        self.said = said
+
+    def _stdout_as_the_child_would_say_it(self, kw) -> str:
+        """按「子进程说什么编码」+「父进程按什么编码读」算一遍落地的字符串。
+
+        两个编码都由**调用方传进来的参数**决定，所以它测的是这一段真代码：
+        子进程侧认 `PYTHONIOENCODING`（`child_env()` 塞的那个键），父进程侧
+        认 `encoding=`。两边不一致时，中文就变成 `U+FFFD`。"""
+        child_enc = (kw.get("env") or {}).get("PYTHONIOENCODING") or self.LOCALE
+        raw = self.said.encode(child_enc, errors="replace")
+        return raw.decode(kw.get("encoding") or self.LOCALE, errors="replace")
 
     def __call__(self, cmd, **kw):
         self.calls.append(list(cmd))
@@ -89,7 +111,9 @@ class _FakeRun:
                          "temperature": 0.7},
                 "rounds": [{"index": 0, "state": {}, "behaviors": []}],
             }, ensure_ascii=False), encoding="utf-8")
-        return subprocess.CompletedProcess(cmd, rc, stdout="ok", stderr="")
+        said = "ok" if self.said is None \
+            else self._stdout_as_the_child_would_say_it(kw)
+        return subprocess.CompletedProcess(cmd, rc, stdout=said, stderr="")
 
 
 def _with_fake(fn, fake: _FakeRun):
@@ -541,6 +565,33 @@ def test_the_manifest_records_the_input_fingerprints_and_the_command():
     assert "--out" in got["command"]
     assert got["ok"] is True
     assert got["out_sha256"]
+
+
+def test_the_log_tail_comes_back_in_chinese():
+    """`arm.json` 抄下来的那 2 KB 日志尾巴，中文必须读得回来。
+
+    **这条是 2026-10-04 要把三支臂入库时才发现的。** `run_arm` 按 UTF-8 读子
+    进程，而子进程被重定向到管道时说的是本机 locale（Windows 中文 = cp936）；
+    那一处又写了 `errors="replace"`，于是这件事**不抛异常**，只把中文逐个换成
+    `U+FFFD` —— 实测三支臂的 2 KB 尾巴里各有 630 处替换符，中文不可还原。
+    臂跑完了、测试全绿，坏掉的是**记录**。
+
+    所以这里不用「不出声的替身」（那种代替物永远读得动），而是让替身按真子
+    进程的规矩说话：`env` 里带着 `PYTHONIOENCODING` 才说 UTF-8，否则说本机
+    locale。去掉 `run_arm` 里的 `env=child_env()`，这条就会红。
+    """
+    said = "完成：15 轮 774 个动作，中文读不回来就等于没记。"
+    root = Path(tempfile.mkdtemp(prefix="weiran-tail-"))
+    master = _master(root)
+    plan = _plan([11], master, root / "runs")[0]
+    manifest = _with_fake(
+        lambda: RS.run_arm(plan, master, RS.hash_master(master)),
+        _FakeRun(said=said))
+
+    assert said in manifest["stdout_tail"], (
+        f"尾巴里的中文没读回来：{manifest['stdout_tail']!r}"
+        " —— 多半是 run_arm 起子进程时少了 env=child_env()")
+    assert "�" not in manifest["stdout_tail"]
 
 
 def test_the_manifest_copies_the_protocol_keys_from_the_artifact():

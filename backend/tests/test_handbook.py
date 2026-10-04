@@ -3,7 +3,7 @@
 **为什么给一份 markdown 写测试。** 这个项目已经吃过一次同类的亏：
 `README.md` 里写着「重写上游前端」，而仓库里没有前端；资源清单里的行数与
 测试条数过期了几个月；清单声称某个键已落盘，入库产出里却没有那个键。
-**文档不会自己发现自己在说谎** —— 它只会安静地漂走，然后被评委当成
+**文档不会自己发现自己在说谎** —— 它只会安静地漂走，然后被读者当成
 「这个人不知道自己在说什么」。
 
 所以这份测试守四件事：
@@ -508,7 +508,7 @@ def test_handbook_states_its_division_of_labour_with_the_readme():
 def test_readme_points_at_the_handbook():
     """反过来也要有路：README 读者要能找到手册。
 
-    只写单向链接的话，评委读完 README 会以为「快速开始」那一节就是全部，
+    只写单向链接的话，读者读完 README 会以为「快速开始」那一节就是全部，
     而它不含产出的字段解读与已知降级项清单。
     """
     text = README.read_text(encoding="utf-8")
@@ -523,7 +523,7 @@ def test_handbook_names_the_known_degradations():
     「让文档好看一点」时被删的就是这一节，而它恰恰是这个项目最不该丢的部分。
     """
     text = _text()
-    for must in ("相位", "1.31%", "767", "证伪", "待决", "chunking-guard"):
+    for must in ("相位", "1.31%", "767", "证伪", "已定案", "chunking-guard"):  # 哨兵词 2026-10-04 由「待决」换成「已定案」，理由见仓库根 `进度.md`
         assert must in text, f"坦白清单里少了 {must!r} —— 这一节不许被删薄"
 
 
@@ -600,17 +600,30 @@ def test_the_unseedable_layer_is_still_marked_as_unseedable():
     assert "播种覆盖不到" in text, "手册没写清播种覆盖不到哪一层"
 
 
-def test_the_handbook_says_the_batch_has_not_been_run():
-    """工具就位、**批次待跑** —— 且要写出为什么待跑。
+def test_the_handbook_says_the_batch_has_been_run_and_ships_with_the_repo():
+    """工具就位 → **这一批已经跑完并随仓库交付** —— 而且说的要和实物对得上。
 
-    这一条防的是两种走样：把「工具就位」写成「已经做完了」（那是在
-    虚报），以及把待决原因删掉（读者会以为现在就能跑一批）。
+    这一条的前身写作「工具就位、**批次待跑**」，守的是「把待跑写成已跑」
+    （那是虚报）。批次真跑完之后，同一条判据要守住的是**反方向**的走样：手册
+    说「已跑完」而 `data/runs/seeds/` 里其实没有那三支臂，或者哪天把臂删了
+    而手册还留着这句话。两种都是**声明与实物脱钩**，与虚报是同一个病。
+
+    所以除了文字，这里直接去仓库里点实物：三支臂目录、逐臂清单、那份纯离线汇总。
+    只核文字的话，这条判据自己也会漂走 —— 而「写着实测」的句子正是这个仓库
+    吃过亏的地方。
     """
     text = _text()
-    assert "工具已经就位" in text
-    assert "但一批还没跑" in text or "一批还没跑" in text
+    assert "已经跑完" in text or "已跑完" in text, "手册没写这一批跑没跑"
+    assert "一批还没跑" not in text, "手册还留着「批次待跑」的旧话"
     for must in ("run_seeds.py", "stability_report.py"):
         assert must in text, f"手册没提 {must}"
+
+    seeds = REPO_ROOT / "data" / "runs" / "seeds"
+    assert (seeds / "stability.md").is_file(), (
+        "手册说这批随仓库交付，仓库里却没有汇总")
+    for name in ("seed11", "seed22", "seed33"):
+        assert (seeds / name / "arm.json").is_file(), (
+            f"手册说交付三支臂，仓库里缺 {name}")
 
 
 def test_the_stability_tools_are_documented_with_their_own_flags():

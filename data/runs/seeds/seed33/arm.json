@@ -1,0 +1,29 @@
+{
+  "label": "seed33",
+  "seed": 33,
+  "command": "python -m weiran.simulate --agents 27 --rounds 15 --scenario benchmark/scenarios/employment_trust_crisis --events-from phases --temperature 0.7 --seed 33 --out data/runs/seeds/seed33",
+  "returncode": 0,
+  "inputs": {
+    "twitter_profiles.csv": "9681970c3f39df27bed5bd06a64637b145d6239b435740a7758c7109fd561cb7",
+    "actor_knowledge.json": "33ef56fc66908c46398c31a124b2560a9a66d4004f09a0313d107f84026d5a17",
+    "stance_cache.json": "783bb4a338b171d87326ef74aa838255e7232298aa3f6fa092858ec1a68a1cd3"
+  },
+  "inputs_absent": [],
+  "out_sha256": "73ce7d1f0a6a71bcda741de2af46d909fd803be545d7bcfb81c903cf8c834582",
+  "ok": true,
+  "stdout_tail": null,
+  "stderr_tail": null,
+  "tails_dropped": "本机控制台是 GBK，而采集侧按 UTF-8 读，这 2 KB 日志尾巴的中文已被换成 U+FFFD、不可还原，故不入库。机器判据（returncode / out_sha256 / 口径键）都在；生成器已修（起子进程带 PYTHONIOENCODING=utf-8，见 weiran/config.py 的 child_env），重跑得到的尾巴是干净中文。",
+  "agents": 27,
+  "rounds": 15,
+  "platform": "twitter",
+  "days_per_round": 1.0,
+  "compressed": false,
+  "events_from": "phases",
+  "phases_on": true,
+  "knowledge_on": true,
+  "feedback_on": true,
+  "world_state": true,
+  "chunking_guard": false,
+  "temperature": 0.7
+}

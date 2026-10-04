@@ -42,7 +42,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from weiran.config import REPO_ROOT, ensure_console_encoding  # noqa: E402
+from weiran.config import (  # noqa: E402
+    REPO_ROOT, child_env, ensure_console_encoding, rel_path)
 from weiran.profiles import DEFAULT_SCENARIO  # noqa: E402
 
 BACKEND = REPO_ROOT / "backend"
@@ -177,7 +178,7 @@ def plan_batch(seeds: list[int], out_root: Path, simulate_args: list[str],
         out_dir = out_root / label
         plans.append(ArmPlan(
             label=label, seed=seed, out_dir=out_dir,
-            argv=simulate_args + ["--seed", str(seed), "--out", str(out_dir)]))
+            argv=simulate_args + ["--seed", str(seed), "--out", rel_path(out_dir)]))
 
     check_consistent(plans, options)
 
@@ -348,10 +349,16 @@ def run_arm(plan: ArmPlan, master: Path, master_hashes: dict, *,
                 f"拷进 {target} 之后 sha256 与底本不符"
                 f"（{got[:12]}… vs {master_hashes[name][:12]}…）—— 停。")
 
+    # `env=child_env()` 不是可选项：这里按 UTF-8 读子进程，就必须先让子进程按
+    # UTF-8 说。少了它，子进程在被重定向到管道时按本机 locale（Windows 中文 =
+    # cp936）输出，而 `errors="replace"` 会让这个错误**不声不响**地发生 ——
+    # 实测三支臂的 2 KB 日志尾巴各被换成 630 个 `U+FFFD`，中文全废。
+    # 「跑得动」把「这份记录已经废了」盖住了，所以配了真子进程来回读的检查
+    # （`tests/test_run_seeds.py::test_the_log_tail_comes_back_in_chinese`）。
     proc = subprocess.run(
         [sys.executable, "-m", "weiran.simulate", *plan.argv],
         cwd=BACKEND, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=timeout)
+        errors="replace", env=child_env(), timeout=timeout)
 
     doc = None
     rounds_path = plan.out_dir / "twitter_rounds.json"
@@ -604,7 +611,7 @@ def main(argv: list[str] | None = None) -> int:
 
     (out_root / "batch.json").write_text(json.dumps({
         "master": master_hashes,
-        "master_dir": str(master),
+        "master_dir": rel_path(master),
         "arms": [p.label for p in plans],
         "options": options[plans[0].label],
         "command": "python backend/run_seeds.py "

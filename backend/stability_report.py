@@ -49,7 +49,8 @@ from weiran.brief import (  # noqa: E402
     load_gold,
     load_rounds,
 )
-from weiran.config import REPO_ROOT, ensure_console_encoding  # noqa: E402
+from weiran.config import (  # noqa: E402
+    REPO_ROOT, absolute_repo_paths, ensure_console_encoding, rel_path)
 from weiran.gold_check import UNDECIDED, build_gold_check  # noqa: E402
 from weiran.profiles import DEFAULT_SCENARIO  # noqa: E402
 from weiran.world_state import DIMENSIONS  # noqa: E402
@@ -148,7 +149,7 @@ def read_arm(arm_dir: Path) -> dict:
     doc = load_rounds(rounds_path)
     return {
         "label": manifest["label"],
-        "dir": str(arm_dir),
+        "dir": rel_path(arm_dir),
         "manifest": manifest,
         "rounds_path": rounds_path,
         "rounds_sha256": recorded,
@@ -638,8 +639,15 @@ def render_markdown(doc: dict) -> str:
 def check_stability(doc: dict, md: str) -> list[str]:
     """产物自己的口径检查。违规就返回问题（调用方负责出声）。
 
-    两条：① **这是读数不是评分** —— 那一句声明要在正文里；
-    ② 正文里不许出现把一致性读成正确性的说法。
+    三条：① **这是读数不是评分** —— 那一句声明要在正文里；
+    ② 正文里不许出现把一致性读成正确性的说法；
+    ③ **本仓库内的路径不许以绝对形式出现**（正文与结构化产物都查）。
+
+    第 ③ 条是 2026-10-04 补的，它就是漏掉过的那一条：这份汇总的 `arm_dirs`
+    一直写着 `D:\\…\\weiran\\data\\runs\\seeds\\seed11`，而上面两条一条都没提这
+    件事 —— 前两条守的是「别把读数读成另一个意思」，这一条守的是「别把本机
+    焊进入库的东西」。加它的时候才发现 `check_stability` 从来没看过 `doc`：
+    口径检查只看正文，而路径在结构化的那一半里。
     """
     problems = []
     if doc["not_a_score"]["statement"] not in md:
@@ -652,6 +660,13 @@ def check_stability(doc: dict, md: str) -> list[str]:
     # 「缺键 ≠ 0」：没有任何一条臂的记录时，正文里不许出现数字 0 顶替它。
     if any(a["seed"] is None for a in doc["arms"]) and "未记录" not in md:
         problems.append("有臂没记 seed，正文里却没有出现「未记录」")
+    for where, text in (("正文", md),
+                        ("结构化产物", json.dumps(doc, ensure_ascii=False))):
+        for path in absolute_repo_paths(text):
+            problems.append(
+                f"{where}里的仓库内路径写成了绝对形式：{path} —— 写进产物的"
+                "路径一律经 `rel_path` 写成仓库相对：换台机器、或仓库换个"
+                "位置，那份记录就和产生它的那次运行对不上")
     return problems
 
 
@@ -689,13 +704,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✗ {root} 下没有任何臂目录", file=sys.stderr)
         return 2
 
-    command = "python backend/stability_report.py --root " + str(args.root)
+    command = "python backend/stability_report.py --root " + rel_path(args.root)
     try:
         arms = [read_arm(d) for d in arm_dirs]
         gold = load_gold(scenario_dir)
         doc = build_stability(arms, gold=gold,
                               scale=args.intervention_scale,
-                              root=str(args.root), command=command)
+                              root=rel_path(args.root), command=command)
     except (StabilityError, BriefError) as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 2
@@ -713,7 +728,7 @@ def main(argv: list[str] | None = None) -> int:
                       encoding="utf-8")
     out_md.write_text(md, encoding="utf-8")
 
-    print(f"已写出 {out_md}")
+    print(f"已写出 {rel_path(out_md)}")
     print(f"  {len(doc['arms'])} 支臂，可采信 {len(doc['drive']['trusted_arms'])}")
     print(f"  驱动峰："
           + ("一致" if doc["drive"]["agrees"] else "**不一致**"))

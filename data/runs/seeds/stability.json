@@ -1,0 +1,882 @@
+{
+  "not_a_score": {
+    "statement": "本表报的是**同一批设定下 N 次抽样的离散**，不是评分。跨 seed 一致**不等于**结论对：一个系统性偏差会在每一个 seed 下一模一样地重现，一致性只能界定**抽样误差**那一部分。",
+    "why": "reference_shape（各阶段六维状态值）是**作者手写的强度预期**，不是观测值，也不是评分基准。任何以它为分母算出的『准确率』都是自说自话。",
+    "source": "benchmark/scenarios/*/reference_data.json → gold_status",
+    "what_agreement_bounds": "只界定「换一个 seed 会不会换个结论」。**它不界定**「这个结论是不是对的」—— 那要靠金标断言本身，而金标自己已经写明了它哪里不硬。"
+  },
+  "protocol": {
+    "agents": 27,
+    "rounds": 15,
+    "platform": "twitter",
+    "days_per_round": 1.0,
+    "compressed": false,
+    "events_from": "phases",
+    "phases_on": true,
+    "knowledge_on": true,
+    "feedback_on": true,
+    "world_state": true,
+    "chunking_guard": false,
+    "temperature": 0.7
+  },
+  "arms": [
+    {
+      "label": "seed11",
+      "seed": 11,
+      "rounds_sha256": "361fe1fdac77a63db05212b8ba1ede4a6eb5476e5238da694e08b1be3812e266",
+      "trusted": true,
+      "replay_max_deviation": 4.948079208771938e-05,
+      "drive_peak_round": 6,
+      "drive_peak_gap": 0.13860000000000006,
+      "peak_undecidable": false,
+      "railed_dims": [
+        "polarization",
+        "risk",
+        "stability",
+        "trust"
+      ]
+    },
+    {
+      "label": "seed22",
+      "seed": 22,
+      "rounds_sha256": "3ff68eba158dfd78f3fedfa6625a8f82cfeb3148c15222eeed4cb6b16680bbef",
+      "trusted": true,
+      "replay_max_deviation": 4.960886007171483e-05,
+      "drive_peak_round": 5,
+      "drive_peak_gap": 0.03370000000000006,
+      "peak_undecidable": false,
+      "railed_dims": [
+        "polarization",
+        "risk",
+        "stability",
+        "trust"
+      ]
+    },
+    {
+      "label": "seed33",
+      "seed": 33,
+      "rounds_sha256": "73ce7d1f0a6a71bcda741de2af46d909fd803be545d7bcfb81c903cf8c834582",
+      "trusted": true,
+      "replay_max_deviation": 4.984313049466449e-05,
+      "drive_peak_round": 6,
+      "drive_peak_gap": 0.16370000000000018,
+      "peak_undecidable": false,
+      "railed_dims": [
+        "polarization",
+        "risk",
+        "stability",
+        "trust"
+      ]
+    }
+  ],
+  "curve": [
+    {
+      "round": 0,
+      "dims": {
+        "attention": {
+          "min": 0.1463,
+          "max": 0.1697,
+          "mean": 0.15566666666666665,
+          "range": 0.023399999999999976
+        },
+        "panic": {
+          "min": 0.1491,
+          "max": 0.1504,
+          "mean": 0.14983333333333335,
+          "range": 0.0012999999999999956
+        },
+        "trust": {
+          "min": 0.6423,
+          "max": 0.6617,
+          "mean": 0.6499333333333334,
+          "range": 0.019399999999999973
+        },
+        "polarization": {
+          "min": 0.1301,
+          "max": 0.1585,
+          "mean": 0.14386666666666667,
+          "range": 0.02840000000000001
+        },
+        "risk": {
+          "min": 0.1464,
+          "max": 0.1693,
+          "mean": 0.15833333333333333,
+          "range": 0.022900000000000004
+        },
+        "stability": {
+          "min": 0.838,
+          "max": 0.8435,
+          "mean": 0.8409666666666666,
+          "range": 0.00550000000000006
+        }
+      }
+    },
+    {
+      "round": 1,
+      "dims": {
+        "attention": {
+          "min": 0.2008,
+          "max": 0.2384,
+          "mean": 0.21983333333333333,
+          "range": 0.037599999999999995
+        },
+        "panic": {
+          "min": 0.2016,
+          "max": 0.2107,
+          "mean": 0.2047,
+          "range": 0.009099999999999997
+        },
+        "trust": {
+          "min": 0.5671,
+          "max": 0.6042,
+          "mean": 0.5915333333333334,
+          "range": 0.03709999999999991
+        },
+        "polarization": {
+          "min": 0.171,
+          "max": 0.2059,
+          "mean": 0.19363333333333332,
+          "range": 0.03489999999999999
+        },
+        "risk": {
+          "min": 0.2158,
+          "max": 0.2483,
+          "mean": 0.2374333333333333,
+          "range": 0.0325
+        },
+        "stability": {
+          "min": 0.8062,
+          "max": 0.8226,
+          "mean": 0.8142666666666667,
+          "range": 0.01639999999999997
+        }
+      }
+    },
+    {
+      "round": 2,
+      "dims": {
+        "attention": {
+          "min": 0.2521,
+          "max": 0.2943,
+          "mean": 0.2690333333333333,
+          "range": 0.042200000000000015
+        },
+        "panic": {
+          "min": 0.2482,
+          "max": 0.2581,
+          "mean": 0.2531,
+          "range": 0.009899999999999992
+        },
+        "trust": {
+          "min": 0.5084,
+          "max": 0.5494,
+          "mean": 0.5338333333333333,
+          "range": 0.041000000000000036
+        },
+        "polarization": {
+          "min": 0.2252,
+          "max": 0.2723,
+          "mean": 0.2539666666666667,
+          "range": 0.047099999999999975
+        },
+        "risk": {
+          "min": 0.3098,
+          "max": 0.3499,
+          "mean": 0.33453333333333335,
+          "range": 0.04009999999999997
+        },
+        "stability": {
+          "min": 0.7609,
+          "max": 0.7891,
+          "mean": 0.7757999999999999,
+          "range": 0.028200000000000003
+        }
+      }
+    },
+    {
+      "round": 3,
+      "dims": {
+        "attention": {
+          "min": 0.2723,
+          "max": 0.3113,
+          "mean": 0.28803333333333336,
+          "range": 0.039000000000000035
+        },
+        "panic": {
+          "min": 0.2805,
+          "max": 0.3017,
+          "mean": 0.2901666666666667,
+          "range": 0.021199999999999997
+        },
+        "trust": {
+          "min": 0.4541,
+          "max": 0.4973,
+          "mean": 0.4751666666666667,
+          "range": 0.043200000000000016
+        },
+        "polarization": {
+          "min": 0.2746,
+          "max": 0.3368,
+          "mean": 0.30596666666666666,
+          "range": 0.06219999999999998
+        },
+        "risk": {
+          "min": 0.398,
+          "max": 0.4527,
+          "mean": 0.42333333333333334,
+          "range": 0.05469999999999997
+        },
+        "stability": {
+          "min": 0.7188,
+          "max": 0.7484,
+          "mean": 0.7296999999999999,
+          "range": 0.02959999999999996
+        }
+      }
+    },
+    {
+      "round": 4,
+      "dims": {
+        "attention": {
+          "min": 0.2795,
+          "max": 0.2949,
+          "mean": 0.28909999999999997,
+          "range": 0.01539999999999997
+        },
+        "panic": {
+          "min": 0.3186,
+          "max": 0.3313,
+          "mean": 0.32706666666666667,
+          "range": 0.012699999999999989
+        },
+        "trust": {
+          "min": 0.384,
+          "max": 0.4389,
+          "mean": 0.4155666666666667,
+          "range": 0.054900000000000004
+        },
+        "polarization": {
+          "min": 0.3307,
+          "max": 0.3817,
+          "mean": 0.36179999999999995,
+          "range": 0.05099999999999999
+        },
+        "risk": {
+          "min": 0.4942,
+          "max": 0.5337,
+          "mean": 0.5154666666666666,
+          "range": 0.03949999999999998
+        },
+        "stability": {
+          "min": 0.6539,
+          "max": 0.6935,
+          "mean": 0.6687,
+          "range": 0.03959999999999997
+        }
+      }
+    },
+    {
+      "round": 5,
+      "dims": {
+        "attention": {
+          "min": 0.2955,
+          "max": 0.3418,
+          "mean": 0.31516666666666665,
+          "range": 0.04630000000000001
+        },
+        "panic": {
+          "min": 0.3799,
+          "max": 0.4028,
+          "mean": 0.38986666666666664,
+          "range": 0.022899999999999976
+        },
+        "trust": {
+          "min": 0.2774,
+          "max": 0.3302,
+          "mean": 0.3084333333333333,
+          "range": 0.052800000000000014
+        },
+        "polarization": {
+          "min": 0.4748,
+          "max": 0.4921,
+          "mean": 0.4834333333333333,
+          "range": 0.017299999999999982
+        },
+        "risk": {
+          "min": 0.6647,
+          "max": 0.6734,
+          "mean": 0.6697666666666667,
+          "range": 0.008700000000000041
+        },
+        "stability": {
+          "min": 0.5496,
+          "max": 0.5841,
+          "mean": 0.5619,
+          "range": 0.034499999999999975
+        }
+      }
+    },
+    {
+      "round": 6,
+      "dims": {
+        "attention": {
+          "min": 0.3393,
+          "max": 0.3436,
+          "mean": 0.3418666666666667,
+          "range": 0.004300000000000026
+        },
+        "panic": {
+          "min": 0.469,
+          "max": 0.4989,
+          "mean": 0.48006666666666664,
+          "range": 0.029900000000000038
+        },
+        "trust": {
+          "min": 0.0782,
+          "max": 0.1755,
+          "mean": 0.1341,
+          "range": 0.09729999999999998
+        },
+        "polarization": {
+          "min": 0.6309,
+          "max": 0.7124,
+          "mean": 0.678,
+          "range": 0.08150000000000002
+        },
+        "risk": {
+          "min": 0.8619,
+          "max": 0.9267,
+          "mean": 0.8942666666666667,
+          "range": 0.06479999999999997
+        },
+        "stability": {
+          "min": 0.3552,
+          "max": 0.4324,
+          "mean": 0.3862333333333334,
+          "range": 0.07719999999999999
+        }
+      }
+    },
+    {
+      "round": 7,
+      "dims": {
+        "attention": {
+          "min": 0.3246,
+          "max": 0.3427,
+          "mean": 0.3359666666666667,
+          "range": 0.018100000000000005
+        },
+        "panic": {
+          "min": 0.5129,
+          "max": 0.5935,
+          "mean": 0.5410333333333334,
+          "range": 0.0806
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0852,
+          "mean": 0.0414,
+          "range": 0.0852
+        },
+        "polarization": {
+          "min": 0.7457,
+          "max": 0.9261,
+          "mean": 0.828,
+          "range": 0.1804
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.1342,
+          "max": 0.2966,
+          "mean": 0.21526666666666663,
+          "range": 0.16239999999999996
+        }
+      }
+    },
+    {
+      "round": 8,
+      "dims": {
+        "attention": {
+          "min": 0.3375,
+          "max": 0.3479,
+          "mean": 0.34146666666666664,
+          "range": 0.010399999999999965
+        },
+        "panic": {
+          "min": 0.5761,
+          "max": 0.6363,
+          "mean": 0.6060333333333333,
+          "range": 0.06020000000000003
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 0.8835,
+          "max": 1.0,
+          "mean": 0.9611666666666666,
+          "range": 0.11650000000000005
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.1285,
+          "mean": 0.04526666666666667,
+          "range": 0.1285
+        }
+      }
+    },
+    {
+      "round": 9,
+      "dims": {
+        "attention": {
+          "min": 0.3295,
+          "max": 0.3575,
+          "mean": 0.3407,
+          "range": 0.02799999999999997
+        },
+        "panic": {
+          "min": 0.635,
+          "max": 0.6776,
+          "mean": 0.6538333333333334,
+          "range": 0.04259999999999997
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        }
+      }
+    },
+    {
+      "round": 10,
+      "dims": {
+        "attention": {
+          "min": 0.3082,
+          "max": 0.3319,
+          "mean": 0.32,
+          "range": 0.0237
+        },
+        "panic": {
+          "min": 0.657,
+          "max": 0.6768,
+          "mean": 0.6648999999999999,
+          "range": 0.01979999999999993
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        }
+      }
+    },
+    {
+      "round": 11,
+      "dims": {
+        "attention": {
+          "min": 0.2728,
+          "max": 0.3361,
+          "mean": 0.2981333333333333,
+          "range": 0.06330000000000002
+        },
+        "panic": {
+          "min": 0.6366,
+          "max": 0.6912,
+          "mean": 0.6705,
+          "range": 0.05459999999999998
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        }
+      }
+    },
+    {
+      "round": 12,
+      "dims": {
+        "attention": {
+          "min": 0.2683,
+          "max": 0.3112,
+          "mean": 0.2829,
+          "range": 0.042899999999999994
+        },
+        "panic": {
+          "min": 0.6049,
+          "max": 0.6889,
+          "mean": 0.6482333333333333,
+          "range": 0.08399999999999996
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        }
+      }
+    },
+    {
+      "round": 13,
+      "dims": {
+        "attention": {
+          "min": 0.1875,
+          "max": 0.2979,
+          "mean": 0.2444666666666667,
+          "range": 0.1104
+        },
+        "panic": {
+          "min": 0.6161,
+          "max": 0.6952,
+          "mean": 0.6447,
+          "range": 0.07910000000000006
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        }
+      }
+    },
+    {
+      "round": 14,
+      "dims": {
+        "attention": {
+          "min": 0.1562,
+          "max": 0.2759,
+          "mean": 0.22926666666666665,
+          "range": 0.11969999999999997
+        },
+        "panic": {
+          "min": 0.5889,
+          "max": 0.6681,
+          "mean": 0.626,
+          "range": 0.07920000000000005
+        },
+        "trust": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        },
+        "polarization": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "risk": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "range": 0.0
+        },
+        "stability": {
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "range": 0.0
+        }
+      }
+    }
+  ],
+  "signal": {
+    "per_dim": {
+      "attention": {
+        "across_arm_spread": 0.04164666666666665,
+        "within_arm_step": 0.025323809523809523,
+        "ratio": 1.6445656261752533
+      },
+      "panic": {
+        "across_arm_spread": 0.04047333333333333,
+        "within_arm_step": 0.04263095238095239,
+        "ratio": 0.949388438983524
+      },
+      "trust": {
+        "across_arm_spread": 0.028726666666666664,
+        "within_arm_step": 0.04642380952380953,
+        "ratio": 0.6187916709406092
+      },
+      "polarization": {
+        "across_arm_spread": 0.041286666666666666,
+        "within_arm_step": 0.06115238095238096,
+        "ratio": 0.675144058557857
+      },
+      "risk": {
+        "across_arm_spread": 0.017546666666666662,
+        "within_arm_step": 0.06011904761904762,
+        "ratio": 0.2918653465346534
+      },
+      "stability": {
+        "across_arm_spread": 0.03479333333333332,
+        "within_arm_step": 0.06006904761904761,
+        "ratio": 0.579222323516588
+      }
+    },
+    "railed_dims": [
+      "polarization",
+      "risk",
+      "stability",
+      "trust"
+    ],
+    "note": "比值 = 跨臂离散 ÷ 臂内相邻轮步长。**比值小**才谈得上有信号（换 seed 的影响小于曲线自己的走动）。**本表不设阈值** —— 没有客观分界，这里只把两个量并排印出来。",
+    "railed_note": "贴过界的维度上两个量都被 `_clamp` 压小了，比值不可读，**只标不判**。"
+  },
+  "drive": {
+    "peaks": {
+      "5": [
+        "seed22"
+      ],
+      "6": [
+        "seed11",
+        "seed33"
+      ]
+    },
+    "agrees": false,
+    "undecidable_arms": [],
+    "trusted_arms": [
+      "seed11",
+      "seed22",
+      "seed33"
+    ],
+    "untrusted_arms": []
+  },
+  "gold": {
+    "per_assertion": [
+      {
+        "id": "AS-1",
+        "verdicts": [
+          "通过",
+          "通过",
+          "通过"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-10",
+        "verdicts": [
+          "否决",
+          "否决",
+          "否决"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-2",
+        "verdicts": [
+          "否决",
+          "通过",
+          "否决"
+        ],
+        "flipped": true,
+        "undecided": 0
+      },
+      {
+        "id": "AS-3",
+        "verdicts": [
+          "否决",
+          "否决",
+          "否决"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-4",
+        "verdicts": [
+          "否决",
+          "否决",
+          "否决"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-5",
+        "verdicts": [
+          "通过",
+          "通过",
+          "通过"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-6",
+        "verdicts": [
+          "通过",
+          "通过",
+          "通过"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-7",
+        "verdicts": [
+          "不可判定",
+          "不可判定",
+          "不可判定"
+        ],
+        "flipped": false,
+        "undecided": 3
+      },
+      {
+        "id": "AS-8",
+        "verdicts": [
+          "否决",
+          "否决",
+          "否决"
+        ],
+        "flipped": false,
+        "undecided": 0
+      },
+      {
+        "id": "AS-9",
+        "verdicts": [
+          "不可判定",
+          "不可判定",
+          "不可判定"
+        ],
+        "flipped": false,
+        "undecided": 3
+      }
+    ],
+    "flipped_ids": [
+      "AS-2"
+    ],
+    "agrees": false
+  },
+  "refusals": [],
+  "evidence": {
+    "railed_dims": [
+      "polarization",
+      "risk",
+      "stability",
+      "trust"
+    ],
+    "railed_note": "贴过界的维度上「跨臂离散」是假的 —— 夹逼把它压小了。这些维度**只标不判**。"
+  },
+  "_provenance": {
+    "root": "data/runs/seeds",
+    "command": "python backend/stability_report.py --root data/runs/seeds",
+    "arms": [
+      "seed11",
+      "seed22",
+      "seed33"
+    ],
+    "arm_dirs": [
+      "data/runs/seeds/seed11",
+      "data/runs/seeds/seed22",
+      "data/runs/seeds/seed33"
+    ]
+  }
+}

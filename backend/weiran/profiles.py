@@ -368,7 +368,7 @@ def _template_persona(actor: dict) -> tuple[str, str]:
     """无 LLM 时的 persona：由 role / stance / group 拼装。
 
     够用但不生动。它的价值在于**让整条管线在没有密钥的情况下也能跑通**——
-    评委、CI、以及我自己调试时都不该被一个 API key 挡住。
+    CI、以及本地调试时都不该被一个 API key 挡住。
     """
     name, group, role, stance = (
         actor["name"], actor["group"], actor["role"], actor["stance"],

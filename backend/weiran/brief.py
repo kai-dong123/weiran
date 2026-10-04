@@ -51,7 +51,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import REPO_ROOT, ensure_console_encoding
+from .config import REPO_ROOT, ensure_console_encoding, rel_path
 from .perception import Phase, active_phase_by_round
 from .profiles import DEFAULT_SCENARIO
 # `_SILENT_ACTIONS` **必须从 `simulate` 拿，不能在这里重抄一份** ——
@@ -182,20 +182,6 @@ def _sha256(path: Path) -> str:
     ).hexdigest()[:16]
 
 
-def _rel(path: Path) -> str:
-    """相对仓库根的路径（正斜杠）；不在仓库内则原样返回。
-
-    指纹里记**相对路径**而不是绝对路径：绝对路径把「本机目录」焊进了入库产物，
-    换台机器、或仓库换个位置，产物就和产生它的那次运行对不上 —— 而这份产物的
-    全部意义就是「我看到的和它说的是同一件事」。相对路径让它在任何克隆位置
-    都能自我复现。
-    """
-    try:
-        return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        return str(path)
-
-
 def load_rounds(path: Path) -> dict:
     """读一份推演产出，并记下它的指纹。
 
@@ -217,7 +203,7 @@ def load_rounds(path: Path) -> dict:
     if not doc["rounds"]:
         raise BriefError(f"{path.name} 的 rounds 是空的，没有可对照的轮次。")
     doc["_provenance"] = {
-        "rounds_file": _rel(path),
+        "rounds_file": rel_path(path),
         "rounds_sha256": _sha256(path),
     }
     return doc
@@ -239,8 +225,8 @@ def load_gold(scenario_dir: Path) -> dict:
     for ph in ref.get("phases", []):
         ph.pop("reference_shape", None)
     ref["_provenance"] = {
-        "scenario_dir": _rel(scenario_dir),
-        "scenario_file": _rel(path),
+        "scenario_dir": rel_path(scenario_dir),
+        "scenario_file": rel_path(path),
         "scenario_sha256": _sha256(path),
     }
     return ref
