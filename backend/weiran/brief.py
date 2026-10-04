@@ -43,7 +43,6 @@ README 承诺三件事：重放舆论演化、逐轮追踪六维状态、**并�
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import re
@@ -51,7 +50,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import REPO_ROOT, ensure_console_encoding, rel_path
+from .config import REPO_ROOT, ensure_console_encoding, rel_path, sha256_text
 from .perception import Phase, active_phase_by_round
 from .profiles import DEFAULT_SCENARIO
 # `_SILENT_ACTIONS` **必须从 `simulate` 拿，不能在这里重抄一份** ——
@@ -164,22 +163,17 @@ _NUMBER = re.compile(r"\d+\.\d+")
 # ---------------------------------------------------------------------------
 
 def _sha256(path: Path) -> str:
-    """一份受版本控制的文本产出的指纹 —— **按文本算，不按字节**。
+    """一份受版本控制的文本产出的指纹 —— **按文本算，不按字节**，截 16 位。
 
-    `read_bytes()` 是个只有**别人 clone 下来**才撞得到的坑：`.gitattributes`
-    的 `eol=lf` 会在检出时把行尾统一成 LF，而本机的工作区是 CRLF。同一个文件
-    在两个人的工作区里**字节不同、文本相同**，于是按字节算出来的指纹钉住的
-    是「谁的行尾配置」，不是「这份产出有没有变」—— 照 README 走一遍的人，
-    会先看到一条指向**不存在的问题**的红。
+    算的地方在 `config.sha256_text`，那儿是**唯一的定义**；这里只负责报告与
+    展示层要的那个短形式（`viewer._sha256` 就是从这里取的）。
 
-    按文本算之后，LF 与 CRLF 两个副本给出同一个指纹。这不是把判据放松了：
-    行尾是 git 的合法产物，不是内容的改动。展示层与金标对照表都引这一个
-    函数（`viewer._sha256` 就是从这里取的）—— 同一件东西抄两份，迟早有一份
-    会漏改。
+    **别在这里另写一份。** 这段注释原先写的是「同一件东西抄两份，迟早有一份
+    会漏改」，当时指的是展示层；后来发现 `run_seeds` 与 `stability_report`
+    各另有一份**按字节**的实现，而它们守的正是「臂的产出有没有被改过」——
+    那个坑在本机永远看不见，只有别人 clone 下来才会撞上。
     """
-    return hashlib.sha256(
-        path.read_text(encoding="utf-8").encode("utf-8")
-    ).hexdigest()[:16]
+    return sha256_text(path)[:16]
 
 
 def load_rounds(path: Path) -> dict:

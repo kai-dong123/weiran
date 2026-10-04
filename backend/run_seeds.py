@@ -32,7 +32,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import subprocess
@@ -43,7 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from weiran.config import (  # noqa: E402
-    REPO_ROOT, child_env, ensure_console_encoding, rel_path)
+    REPO_ROOT, child_env, ensure_console_encoding, rel_path, sha256_text)
 from weiran.profiles import DEFAULT_SCENARIO  # noqa: E402
 
 BACKEND = REPO_ROOT / "backend"
@@ -80,10 +79,6 @@ PHASE_READING_MIN_AGENTS = 27
 
 class BatchRefused(Exception):
     """这一批不该跑。**拒绝时要给出理由与下一步**，不是一句「不合法」。"""
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +230,7 @@ def hash_master(master: Path) -> dict:
                 f"底本缺 {p} —— 一次批次要的正是这两个必需输入各拷一份。"
                 "缺了它，「臂之间输入同源」这句话就没有依据。"
                 f"（{OPTIONAL_INPUTS[0]} 是另一回事：它不入库，没有也照样跑。）")
-        out[name] = _sha256(p)
+        out[name] = sha256_text(p)
     return out
 
 
@@ -343,7 +338,7 @@ def run_arm(plan: ArmPlan, master: Path, master_hashes: dict, *,
             target.unlink(missing_ok=True)
             continue
         shutil.copy2(master / name, target)
-        got = _sha256(target)
+        got = sha256_text(target)
         if got != master_hashes[name]:
             raise BatchRefused(
                 f"拷进 {target} 之后 sha256 与底本不符"
@@ -374,7 +369,7 @@ def run_arm(plan: ArmPlan, master: Path, master_hashes: dict, *,
         # 「底本没有哪一份可选输入」也记下来：`inputs` 里那个 `None` 单看像是
         # 漏写，而它是**本次的实情**。汇总器按值比较，不受这个键影响。
         "inputs_absent": absent_optional(master_hashes),
-        "out_sha256": _sha256(rounds_path) if rounds_path.is_file() else None,
+        "out_sha256": sha256_text(rounds_path) if rounds_path.is_file() else None,
         "ok": proc.returncode == 0 and doc is not None,
         "stdout_tail": proc.stdout[-2000:] if proc.stdout else "",
         "stderr_tail": proc.stderr[-2000:] if proc.stderr else "",

@@ -465,6 +465,32 @@ def test_arms_differing_in_rounds_are_refused():
         raise AssertionError("轮数不一致的一批没被拦下")
 
 
+def test_a_master_checked_out_with_other_line_endings_hashes_the_same():
+    """**底本被检出成 LF（本机是 CRLF）不该读成「底本已经换过」。**
+
+    `hash_master` 记的是**按文本**算的指纹。行尾是 git 的合法产物
+    （`.gitattributes` 的 `eol=lf` 让任何一次检出都是 LF，而本机工作区是
+    CRLF），不是内容的改动。按字节算的话，录这批指纹的人在自己机器上永远看
+    不到问题，而别人 clone 下来重跑一次就会被告知「新臂与旧臂**不可比**」
+    —— 那是假的，而且正好否掉了这批臂唯一的用处。
+
+    反向对照就是下一条：真换过底本仍然要拦。
+    """
+    root = Path(tempfile.mkdtemp(prefix="weiran-eol-master-"))
+    master = root / "master"
+    master.mkdir(parents=True, exist_ok=True)
+    for name in RS.INPUT_FILES:
+        (master / name).write_bytes(f"甲\n乙\n{name}\n".encode("utf-8"))
+    lf = RS.hash_master(master)
+    for name in RS.INPUT_FILES:                       # 换成 CRLF 再算一遍
+        p = master / name
+        p.write_bytes(p.read_text(encoding="utf-8")
+                      .replace("\n", "\r\n").encode("utf-8"))
+    assert b"\r\n" in (master / RS.INPUT_FILES[0]).read_bytes(), \
+        "夹具没真的换成 CRLF"
+    assert RS.hash_master(master) == lf, "行尾不同就算出不同指纹"
+
+
 def test_a_changed_master_since_the_last_batch_is_refused():
     """跨批次比较的前提是输入同源。**换过底本就得知道** ——
     否则新臂与旧臂的差异不止是 seed。"""

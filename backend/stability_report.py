@@ -50,7 +50,8 @@ from weiran.brief import (  # noqa: E402
     load_rounds,
 )
 from weiran.config import (  # noqa: E402
-    REPO_ROOT, absolute_repo_paths, ensure_console_encoding, rel_path)
+    REPO_ROOT, absolute_repo_paths, ensure_console_encoding, rel_path,
+    sha256_text)
 from weiran.gold_check import UNDECIDED, build_gold_check  # noqa: E402
 from weiran.profiles import DEFAULT_SCENARIO  # noqa: E402
 from weiran.world_state import DIMENSIONS  # noqa: E402
@@ -95,10 +96,6 @@ class StabilityError(Exception):
 # 读臂
 # ---------------------------------------------------------------------------
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def content_sha256(doc: dict) -> str:
     """**只对 `rounds` 取指纹，不含 `meta`。**
 
@@ -140,7 +137,10 @@ def read_arm(arm_dir: Path) -> dict:
             "应当恰好一份")
     rounds_path = rounds_files[0]
 
-    recorded = _sha256(rounds_path)
+    # 按**文本**算，不按字节 —— 见 `config.sha256_text`：行尾是 git 的合法
+    # 产物，不是内容的改动。按字节算的话，别人 clone 下来会先撞一条指向
+    # 不存在问题的红（而录这个指纹的人在自己机器上永远看不到）。
+    recorded = sha256_text(rounds_path)
     if manifest.get("out_sha256") and manifest["out_sha256"] != recorded:
         raise StabilityError(
             f"{arm_dir} 的产出在开跑之后被改过：arm.json 记的是 "
@@ -704,13 +704,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✗ {root} 下没有任何臂目录", file=sys.stderr)
         return 2
 
-    command = "python backend/stability_report.py --root " + rel_path(args.root)
+    # 记进产物的是**解析之后**的那个 root，不是命令行里那个字符串。
+    # 上面刚把相对 root 按仓库根解析（见 `root = REPO_ROOT / root`），而
+    # `rel_path("data/runs/seeds")` 是按**当前目录**解析的 —— 两处各算一次，
+    # 于是「在 backend/ 里跑一次」会把 `backend/data/runs/seeds` 写进产物：
+    # 读的是仓库根那份，记的却是另一条路径。同一件东西只算一次。
+    command = "python backend/stability_report.py --root " + rel_path(root)
     try:
         arms = [read_arm(d) for d in arm_dirs]
         gold = load_gold(scenario_dir)
         doc = build_stability(arms, gold=gold,
                               scale=args.intervention_scale,
-                              root=rel_path(args.root), command=command)
+                              root=rel_path(root), command=command)
     except (StabilityError, BriefError) as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 2

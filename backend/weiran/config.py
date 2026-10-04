@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sys
@@ -34,6 +35,33 @@ def rel_path(path) -> str:
         return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
     except ValueError:
         return str(path)
+
+
+def sha256_text(path) -> str:
+    """一份受版本控制的文本文件的指纹 —— **按文本算，不按字节**。
+
+    与 `rel_path` / `absolute_repo_paths` 是同一件事的两个方向：那两个管
+    「写进记录里的路径不能焊住本机」，这个管「写进记录里的指纹不能焊住本机
+    的行尾」。理由一样、病也一样 —— 本机的工作区是 CRLF，而 `.gitattributes`
+    的 `eol=lf` 让**任何一次检出**都是 LF：
+
+      - 同一个文件在两台机器上**字节不同、文本相同**；
+      - 于是按 `read_bytes()` 算出来的指纹钉住的是「谁的行尾配置」，
+        不是「这份产出有没有变」；
+      - 后果不是「宽松了」，是**别人 clone 下来先撞一条指向不存在问题的红**
+        —— 而录指纹的人在自己这台机器上永远看不到它。
+
+    按文本算之后，LF 与 CRLF 两个副本给出同一个指纹。这不是把判据放松：行尾
+    是 git 的合法产物，不是内容的改动。真被改过的文件两边都变，仍然报得出。
+
+    **只此一处定义。** 原先 `brief.py` 有一份（按文本），`run_seeds.py` 与
+    `stability_report.py` 各另有一份（按字节）—— 三份里有两份是错的，而
+    错的那两份恰好守着「臂的产出有没有被改过」那条判据。要按文本算的地方
+    一律引这里；`brief._sha256` 是本函数的展示形式（截 16 位）。
+    """
+    return hashlib.sha256(
+        Path(path).read_text(encoding="utf-8").encode("utf-8")
+    ).hexdigest()
 
 
 #: 文本里的路径**长什么样**：盘符 + 分隔符，或两种 POSIX 家目录。

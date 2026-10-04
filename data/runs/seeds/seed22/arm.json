@@ -4,12 +4,12 @@
   "command": "python -m weiran.simulate --agents 27 --rounds 15 --scenario benchmark/scenarios/employment_trust_crisis --events-from phases --temperature 0.7 --seed 22 --out data/runs/seeds/seed22",
   "returncode": 0,
   "inputs": {
-    "twitter_profiles.csv": "9681970c3f39df27bed5bd06a64637b145d6239b435740a7758c7109fd561cb7",
-    "actor_knowledge.json": "33ef56fc66908c46398c31a124b2560a9a66d4004f09a0313d107f84026d5a17",
-    "stance_cache.json": "783bb4a338b171d87326ef74aa838255e7232298aa3f6fa092858ec1a68a1cd3"
+    "twitter_profiles.csv": "bae8fc518d3acbf8ed6d966973affa7154eb16a8d1335d928b023a30f0d3b45a",
+    "actor_knowledge.json": "580da7fabc7e0cb89747677792331e40f002f2b55f2e5bc482f435c7aa1220a2",
+    "stance_cache.json": "19f6ba33e3351f2cc1771dfdc7ec5079c26c37781bd049dc4274b26ff346c0f7"
   },
   "inputs_absent": [],
-  "out_sha256": "3ff68eba158dfd78f3fedfa6625a8f82cfeb3148c15222eeed4cb6b16680bbef",
+  "out_sha256": "15b1aee163927df2d1b92174735abdc4401b648b482367af405cd333730bf844",
   "ok": true,
   "stdout_tail": null,
   "stderr_tail": null,

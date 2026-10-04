@@ -28,8 +28,8 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
+import os
 import random
 import sys
 import tempfile
@@ -39,7 +39,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import stability_report as SR  # noqa: E402
 from weiran.brief import load_gold, replay  # noqa: E402
-from weiran.config import REPO_ROOT, ensure_console_encoding  # noqa: E402
+from weiran.config import (  # noqa: E402
+    REPO_ROOT, ensure_console_encoding, sha256_text)
 from weiran.gold_check import FAIL_, PASS_  # noqa: E402
 from weiran.profiles import DEFAULT_SCENARIO  # noqa: E402
 from weiran.world_state import DIMENSIONS, WorldStateEngine  # noqa: E402
@@ -106,7 +107,7 @@ def _write_arm(root: Path, label: str, doc: dict, *, seed: int,
     manifest = {
         "label": label, "seed": seed, "command": f"simulate --seed {seed}",
         "inputs": {n: inputs for n in SR.INPUT_FILES},
-        "out_sha256": out_sha or hashlib.sha256(path.read_bytes()).hexdigest(),
+        "out_sha256": out_sha or sha256_text(path),
     }
     manifest.update(manifest_extra or {})
     (arm / "arm.json").write_text(
@@ -435,6 +436,55 @@ def test_an_artifact_edited_after_the_run_is_refused():
         raise AssertionError("跑完之后被改过的产物没被拦下")
 
 
+def test_the_fingerprint_of_a_text_product_ignores_line_endings():
+    """**行尾不同的两个副本必须是同一个指纹。**
+
+    这条只在**别人 clone 下来**时才会响：`.gitattributes` 的 `eol=lf` 让任何
+    一次检出都是 LF，而录指纹的这台本机工作区是 CRLF（git 自己看不出差别，
+    所以录的人在本机永远撞不到）。按字节算的话，`arm.json` 里那个指纹只管得住
+    产生它的那台机器 —— 照 README 走一遍的人，第一条命令就撞一条指向
+    **不存在的问题**的红。
+
+    反向对照是上面那条：真改过内容仍然要被拦下。这两条一起才说明「按文本算」
+    没有把判据放松，只是把它钉在了内容上。
+    """
+    root = Path(tempfile.mkdtemp(prefix="weiran-eol-"))
+    p = root / "twitter_rounds.json"
+    p.write_bytes('{"rounds": []}\n'.encode("utf-8"))
+    lf = sha256_text(p)
+    p.write_bytes('{"rounds": []}\r\n'.encode("utf-8"))
+    assert sha256_text(p) == lf, "行尾换了指纹就变了 —— 那不是内容的指纹"
+
+
+def test_an_arm_survives_a_checkout_that_changed_the_line_endings():
+    """一支合法的臂，产物按另一种行尾写一遍，**仍然认得出来**。
+
+    与上一条是一件事的两头：那条量的是指纹本身，这条量的是守着臂的那道判据
+    （`read_arm`）在两个方向上都不误报。
+
+    第一步的重新序列化不是装饰：`_write_arm` 写的是**单行** JSON，没有行尾
+    可谈 —— 直接改行尾会是一条恒真的判据（它会在两种实现下都绿）。所以先写
+    成多行，再按同一套口径重记指纹，然后才去动行尾。下面那句 `assert "\n"`
+    就是给这件事上的锁。
+    """
+    root = Path(tempfile.mkdtemp(prefix="weiran-eol-arm-"))
+    arm = _write_arm(root, "seed11", _variant(11), seed=11)
+    p = arm / "twitter_rounds.json"
+    p.write_text(json.dumps(json.loads(p.read_text(encoding="utf-8")),
+                            ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest = json.loads((arm / "arm.json").read_text(encoding="utf-8"))
+    manifest["out_sha256"] = sha256_text(p)
+    (arm / "arm.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    text = p.read_text(encoding="utf-8")
+    assert "\n" in text, "夹具里没有行尾 —— 这条判据会变成恒真"
+    for eol in ("\n", "\r\n"):
+        p.write_bytes(
+            text.replace("\r\n", "\n").replace("\n", eol).encode("utf-8"))
+        SR.read_arm(arm)  # 行尾不是内容的改动：两个方向都不该抛
+
+
 def test_two_artifacts_in_one_arm_directory_are_refused():
     """一支臂的目录里应当恰好一份产出。两份说明有人把两次跑混在了一起。"""
     root = Path(tempfile.mkdtemp(prefix="weiran-two-"))
@@ -585,6 +635,37 @@ def test_a_repo_path_written_absolutely_is_rejected():
     outside = SR.check_stability(
         doc, md + "\n临时目录：`/tmp/weiran-arms/seed11` 与 `C:\\Users\\x\\t`\n")
     assert outside == [], outside
+
+
+def test_the_recorded_root_does_not_depend_on_the_working_directory():
+    """**读的是哪份目录，记的就该是哪条路径** —— 两处不许各算一把尺子。
+
+    条缺陷在 2026-10-04 真的发生过：`--root data/runs/seeds` 里的**目录**是按
+    仓库根解析的（在 `backend/` 里跑也一样读到仓库根那份），而记进产物的那句
+    话是按**当前目录**解析的。于是在 `backend/` 里跑一次，入库的 `stability.md`
+    就被写成 `臂目录：backend/data/runs/seeds` —— 指向的地方跟真正读的那份
+    不是同一个，而上面那几条口径检查一条都不提它（它们守的是绝对路径，
+    这条不是绝对路径）。
+
+    这里换一个当前目录跑一遍真的 `main()`，量的是**记下来的那个字符串**。
+    换的这个目录必须在**仓库内**（这里用 `backend/`）：`rel_path` 对仓库外的
+    路径本来就原样返回，所以把当前目录换到临时目录去，旧写法也会凑巧答对 ——
+    那样这条判据就成了恒真的。踩过一次，所以记在这儿。
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="weiran-cwd-"))
+    before = Path.cwd()
+    try:
+        os.chdir(REPO_ROOT / "backend")
+        rc = SR.main(["--root", "data/runs/seeds",
+                      "--out", str(tmp / "s.md"), "--json", str(tmp / "s.json")])
+        assert rc == 0, rc
+        doc = json.loads((tmp / "s.json").read_text(encoding="utf-8"))
+        got = doc["_provenance"]["root"]
+        assert got == "data/runs/seeds", got
+        assert "backend/data" not in doc["_provenance"]["command"], \
+            doc["_provenance"]["command"]
+    finally:
+        os.chdir(before)
 
 
 def test_railed_dimensions_are_flagged_but_not_judged():

@@ -23,7 +23,7 @@
     {
       "label": "seed11",
       "seed": 11,
-      "rounds_sha256": "361fe1fdac77a63db05212b8ba1ede4a6eb5476e5238da694e08b1be3812e266",
+      "rounds_sha256": "b8337b4171534bcaf34d4c8c2c20e2e63cc3a0556cbd15de0b98aec8f5c0a9d7",
       "trusted": true,
       "replay_max_deviation": 4.948079208771938e-05,
       "drive_peak_round": 6,
@@ -39,7 +39,7 @@
     {
       "label": "seed22",
       "seed": 22,
-      "rounds_sha256": "3ff68eba158dfd78f3fedfa6625a8f82cfeb3148c15222eeed4cb6b16680bbef",
+      "rounds_sha256": "15b1aee163927df2d1b92174735abdc4401b648b482367af405cd333730bf844",
       "trusted": true,
       "replay_max_deviation": 4.960886007171483e-05,
       "drive_peak_round": 5,
@@ -55,7 +55,7 @@
     {
       "label": "seed33",
       "seed": 33,
-      "rounds_sha256": "73ce7d1f0a6a71bcda741de2af46d909fd803be545d7bcfb81c903cf8c834582",
+      "rounds_sha256": "bc8e3a146b5f5fb1b39f57634d8501df9df9a56c19eac506dc0e5bda9a95d16d",
       "trusted": true,
       "replay_max_deviation": 4.984313049466449e-05,
       "drive_peak_round": 6,
